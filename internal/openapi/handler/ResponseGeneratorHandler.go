@@ -1,13 +1,17 @@
 package handler
 
 import (
-	"net/http"
-
+	"encoding/json"
 	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	"github.com/muonsoft/openapi-mock/internal/openapi/responder"
 	"github.com/muonsoft/openapi-mock/pkg/logcontext"
 	"github.com/pkg/errors"
+	"io"
+	"io/fs"
+	"io/ioutil"
+	"net/http"
+	"os"
 )
 
 type responseGeneratorHandler struct {
@@ -62,6 +66,50 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		logger.Infof("Route '%s %s' does not pass validation: %v", request.Method, request.URL, err.Error())
 
 		return
+	}
+
+	if request.Body != http.NoBody && request.Body != nil {
+		defer func(Body io.ReadCloser) {
+			err := Body.Close()
+			if err != nil {
+				logger.Errorf("Cannot close body", err)
+			}
+		}(request.Body)
+		bodyData, err := ioutil.ReadAll(request.Body)
+		if err == nil {
+			filename := "requests.json"
+			requests := map[string][]interface{}{}
+			_, err := os.Stat(filename)
+			if !os.IsNotExist(err) {
+				// file exists
+				fileContent, _ := ioutil.ReadFile(filename)
+				err := json.Unmarshal(fileContent, &requests)
+				if err != nil {
+					logger.Errorf("JSON read error", err)
+				}
+			}
+			requestsOfPath, ok := requests[request.URL.Path]
+			var dataJson map[string]interface{}
+			err = json.Unmarshal(bodyData, &dataJson)
+			if err != nil {
+				logger.Errorf("Json unmarshal error", err)
+			}
+			if ok {
+				requests[request.URL.Path] = append(requestsOfPath, dataJson)
+			} else {
+				requests[request.URL.Path] = []interface{}{dataJson}
+			}
+			fileData, err := json.Marshal(requests)
+			if err != nil {
+				logger.Errorf("Json marshal error", err)
+			}
+			err = ioutil.WriteFile(filename, fileData, fs.ModePerm)
+			if err != nil {
+				logger.Errorf("Cannot write file %s", filename, err)
+			}
+		} else {
+			logger.Errorf("Cannot read body", err)
+		}
 	}
 
 	response, err := handler.responseGenerator.GenerateResponse(request, route)
