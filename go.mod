@@ -1,6 +1,6 @@
 module github.com/muonsoft/openapi-mock
 
-go 1.15
+go 1.16
 
 require (
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
@@ -19,7 +19,6 @@ require (
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.6.1
 	github.com/unrolled/secure v1.0.8
-	go.mongodb.org/mongo-driver v1.5.2
 	golang.org/x/sys v0.0.0-20201107080550-4d91cf3a1aaf // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 	syreclabs.com/go/faker v1.2.2
