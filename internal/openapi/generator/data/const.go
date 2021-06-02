@@ -1,6 +1,6 @@
 package data
 
 const (
-	defaultMaxLength = 200
-	defaultMaxItems  = 20
+	defaultMaxLength = 10
+	defaultMaxItems  = 1
 )

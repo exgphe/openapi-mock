@@ -1,13 +1,13 @@
 package handler
 
 import (
-	"github.com/exgphe/kin-openapi/routers"
+	"github.com/exgphe/kin-openapi/routers/legacy"
 	"net/http"
 	"strings"
 )
 
 type optionsHandler struct {
-	router      *routers.Router
+	router      *legacy.Router
 	nextHandler http.Handler
 }
 

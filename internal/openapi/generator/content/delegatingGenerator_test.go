@@ -14,11 +14,11 @@ import (
 
 func TestDelegatingGenerator_GenerateContent_MatchingProcessorFound_ResponseProcessedByMatchingProcessor(t *testing.T) {
 	matchingGenerator := &MockGenerator{}
-	generator := &delegatingGenerator{
-		matchers: []contentMatcher{
+	generator := &DelegatingGenerator{
+		Matchers: []ContentMatcher{
 			{
-				pattern:   regexp.MustCompile("^application/.*json$"),
-				generator: matchingGenerator,
+				Pattern:   regexp.MustCompile("^application/.*json$"),
+				Generator: matchingGenerator,
 			},
 		},
 	}
@@ -34,8 +34,8 @@ func TestDelegatingGenerator_GenerateContent_MatchingProcessorFound_ResponseProc
 }
 
 func TestDelegatingGenerator_GenerateContent_NoMatchingProcessorFound_MediaTypeAndError(t *testing.T) {
-	generator := &delegatingGenerator{
-		matchers: []contentMatcher{},
+	generator := &DelegatingGenerator{
+		Matchers: []ContentMatcher{},
 	}
 	contentType := "contentType"
 	response := &openapi3.Response{}
@@ -49,8 +49,8 @@ func TestDelegatingGenerator_GenerateContent_NoMatchingProcessorFound_MediaTypeA
 }
 
 func TestDelegatingGenerator_GenerateContent_NoContentType_EmptyString(t *testing.T) {
-	generator := &delegatingGenerator{
-		matchers: []contentMatcher{},
+	generator := &DelegatingGenerator{
+		Matchers: []ContentMatcher{},
 	}
 	response := &openapi3.Response{}
 

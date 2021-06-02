@@ -6,12 +6,12 @@ import (
 	"github.com/exgphe/kin-openapi/openapi3"
 )
 
-type coordinatingMediaGenerator struct {
+type CoordinatingMediaGenerator struct {
 	useExamples     UseExamplesEnum
 	schemaGenerator schemaGenerator
 }
 
-func (generator *coordinatingMediaGenerator) GenerateData(ctx context.Context, mediaType *openapi3.MediaType) (Data, error) {
+func (generator *CoordinatingMediaGenerator) GenerateData(ctx context.Context, mediaType *openapi3.MediaType) (Data, error) {
 	if generator.useExamples == IfPresent || generator.useExamples == Exclusively {
 		if mediaType.Example != nil {
 			return mediaType.Example, nil

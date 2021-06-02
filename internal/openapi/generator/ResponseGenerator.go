@@ -11,6 +11,7 @@ import (
 
 type ResponseGenerator interface {
 	GenerateResponse(request *http.Request, route *routers.Route) (*Response, error)
+	GenerateRequestData(request *http.Request, route *routers.Route) (interface{}, error)
 }
 
 func New(dataGenerator data.MediaGenerator) ResponseGenerator {

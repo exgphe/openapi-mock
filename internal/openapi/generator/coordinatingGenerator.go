@@ -20,7 +20,6 @@ func (generator *coordinatingGenerator) GenerateResponse(request *http.Request, 
 	if err != nil {
 		return nil, errors.WithMessage(err, "[coordinatingGenerator] failed to negotiate response")
 	}
-
 	bestResponse := route.Operation.Responses[responseKey].Value
 	contentType := generator.contentTypeNegotiator.NegotiateContentType(request, bestResponse)
 
@@ -36,4 +35,9 @@ func (generator *coordinatingGenerator) GenerateResponse(request *http.Request, 
 	}
 
 	return response, nil
+}
+
+func (generator *coordinatingGenerator) GenerateRequestData(request *http.Request, route *routers.Route) (interface{}, error) {
+	bestRequest := route.Operation.RequestBody.Value
+	return generator.contentGenerator.(*content.DelegatingGenerator).Matchers[0].Generator.(*content.MediaGenerator).ContentGenerator.GenerateData(request.Context(), bestRequest.GetMediaType("application/yang-data+json"))
 }

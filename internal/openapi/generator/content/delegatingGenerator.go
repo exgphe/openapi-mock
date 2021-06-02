@@ -9,23 +9,23 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/errors"
 )
 
-type delegatingGenerator struct {
-	matchers []contentMatcher
+type DelegatingGenerator struct {
+	Matchers []ContentMatcher
 }
 
-type contentMatcher struct {
-	pattern   *regexp.Regexp
-	generator Generator
+type ContentMatcher struct {
+	Pattern   *regexp.Regexp
+	Generator Generator
 }
 
-func (processor *delegatingGenerator) GenerateContent(ctx context.Context, response *openapi3.Response, contentType string) (interface{}, error) {
+func (processor *DelegatingGenerator) GenerateContent(ctx context.Context, response *openapi3.Response, contentType string) (interface{}, error) {
 	if contentType == "" {
 		return "", nil
 	}
 
-	for _, matcher := range processor.matchers {
-		if matcher.pattern.MatchString(contentType) {
-			return matcher.generator.GenerateContent(ctx, response, contentType)
+	for _, matcher := range processor.Matchers {
+		if matcher.Pattern.MatchString(contentType) {
+			return matcher.Generator.GenerateContent(ctx, response, contentType)
 		}
 	}
 

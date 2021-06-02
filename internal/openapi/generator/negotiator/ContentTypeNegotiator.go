@@ -30,11 +30,11 @@ func (negotiator *contentTypeNegotiator) NegotiateContentType(request *http.Requ
 	contentTypes := negotiator.getContentTypes(response)
 	contentType := content.NegotiateContentType(request, contentTypes, contentTypes[0])
 
-	logger.Infof(
-		"[contentTypeNegotiator] best media type '%s' was negotiated for accept header '%s'",
-		contentType,
-		request.Header.Get("Accept"),
-	)
+	//logger.Infof(
+	//	"[contentTypeNegotiator] best media type '%s' was negotiated for accept header '%s'",
+	//	contentType,
+	//	request.Header.Get("Accept"),
+	//)
 
 	return contentType
 }

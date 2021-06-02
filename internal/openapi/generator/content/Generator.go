@@ -13,25 +13,25 @@ type Generator interface {
 }
 
 func NewGenerator(generator data.MediaGenerator) Generator {
-	mediaGenerator := &mediaGenerator{contentGenerator: generator}
+	mediaGenerator := &MediaGenerator{ContentGenerator: generator}
 
-	return &delegatingGenerator{
-		matchers: []contentMatcher{
+	return &DelegatingGenerator{
+		Matchers: []ContentMatcher{
 			{
-				pattern:   regexp.MustCompile("^application/.*json$"),
-				generator: mediaGenerator,
+				Pattern:   regexp.MustCompile("^application/.*json$"),
+				Generator: mediaGenerator,
 			},
 			{
-				pattern:   regexp.MustCompile("^application/.*xml$"),
-				generator: mediaGenerator,
+				Pattern:   regexp.MustCompile("^application/.*xml$"),
+				Generator: mediaGenerator,
 			},
 			{
-				pattern:   regexp.MustCompile("^text/html$"),
-				generator: &htmlGenerator{contentGenerator: generator},
+				Pattern:   regexp.MustCompile("^text/html$"),
+				Generator: &htmlGenerator{contentGenerator: generator},
 			},
 			{
-				pattern:   regexp.MustCompile("^text/plain$"),
-				generator: &plainTextGenerator{contentGenerator: generator},
+				Pattern:   regexp.MustCompile("^text/plain$"),
+				Generator: &plainTextGenerator{contentGenerator: generator},
 			},
 		},
 	}

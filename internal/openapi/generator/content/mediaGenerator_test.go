@@ -12,7 +12,7 @@ import (
 
 func TestMediaGenerator_GenerateContent_ResponseWithContent_GeneratedMediaDataReturned(t *testing.T) {
 	contentGenerator := &generatormock.MediaGenerator{}
-	generator := &mediaGenerator{contentGenerator: contentGenerator}
+	generator := &MediaGenerator{ContentGenerator: contentGenerator}
 	mediaType := &openapi3.MediaType{}
 	response := &openapi3.Response{
 		Content: map[string]*openapi3.MediaType{
@@ -30,7 +30,7 @@ func TestMediaGenerator_GenerateContent_ResponseWithContent_GeneratedMediaDataRe
 
 func TestMediaGenerator_GenerateContent_ResponseWithoutContent_EmptyDataReturned(t *testing.T) {
 	contentGenerator := &generatormock.MediaGenerator{}
-	generator := &mediaGenerator{contentGenerator: contentGenerator}
+	generator := &MediaGenerator{ContentGenerator: contentGenerator}
 	response := &openapi3.Response{
 		Content: map[string]*openapi3.MediaType{},
 	}

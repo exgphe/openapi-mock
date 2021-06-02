@@ -35,9 +35,9 @@ type Configuration struct {
 
 const (
 	DefaultPort            = uint16(8080)
-	DefaultResponseTimeout = time.Second
+	DefaultResponseTimeout = time.Hour
 	DefaultLogLevel        = logrus.InfoLevel
-	DefaultNullProbability = 0.5
+	DefaultNullProbability = 0
 	DefaultMaxInt          = int64(math.MaxInt32)
 	DefaultMinFloat        = -float64(math.MaxInt32 / 2)
 	DefaultMaxFloat        = float64(math.MaxInt32 / 2)

@@ -11,7 +11,7 @@ import (
 
 func TestCoordinatingMediaGenerator_GenerateData_DataSchemaOnly_DataGeneratedBySchema(t *testing.T) {
 	schemaGeneratorMock := &mockSchemaGenerator{}
-	mediaGenerator := &coordinatingMediaGenerator{
+	mediaGenerator := &CoordinatingMediaGenerator{
 		schemaGenerator: schemaGeneratorMock,
 	}
 	schema := openapi3.NewSchema()
@@ -32,7 +32,7 @@ func TestCoordinatingMediaGenerator_GenerateData_UseExamplesOptionAndGivenExampl
 	const exampleData = "exampleData"
 
 	schemaGeneratorMock := &mockSchemaGenerator{}
-	mediaGenerator := &coordinatingMediaGenerator{
+	mediaGenerator := &CoordinatingMediaGenerator{
 		schemaGenerator: schemaGeneratorMock,
 	}
 	schema := openapi3.NewSchema()

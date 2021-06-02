@@ -7,15 +7,15 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator/data"
 )
 
-type mediaGenerator struct {
-	contentGenerator data.MediaGenerator
+type MediaGenerator struct {
+	ContentGenerator data.MediaGenerator
 }
 
-func (generator *mediaGenerator) GenerateContent(ctx context.Context, response *openapi3.Response, contentType string) (interface{}, error) {
+func (generator *MediaGenerator) GenerateContent(ctx context.Context, response *openapi3.Response, contentType string) (interface{}, error) {
 	mediaType := response.Content[contentType]
 	if mediaType == nil {
 		return "", nil
 	}
 
-	return generator.contentGenerator.GenerateData(ctx, mediaType)
+	return generator.ContentGenerator.GenerateData(ctx, mediaType)
 }

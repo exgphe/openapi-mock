@@ -48,6 +48,10 @@ func (generator *integerGenerator) getMinMax(schema *openapi3.Schema) (int64, in
 	}
 	if schema.Max != nil {
 		maximum = int64(*schema.Max)
+		if *schema.Max > 0 && maximum < 0 {
+			// overflow
+			maximum = math.MaxInt64
+		}
 	}
 
 	if schema.ExclusiveMin {

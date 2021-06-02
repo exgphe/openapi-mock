@@ -13,14 +13,14 @@ type textGenerator struct {
 
 func (generator *textGenerator) GenerateDataBySchema(ctx context.Context, schema *openapi3.Schema) (Data, error) {
 	var maxLength uint64
-	if schema.MaxLength != nil {
-		maxLength = *schema.MaxLength
+	if schema.MinLength < defaultMaxLength {
+		maxLength = defaultMaxLength
 	} else {
-		if schema.MinLength < defaultMaxLength {
-			maxLength = defaultMaxLength
-		} else {
-			maxLength = schema.MinLength + defaultMaxLength
-		}
+		maxLength = schema.MinLength + defaultMaxLength
+	}
+
+	if schema.MaxLength != nil && maxLength > *schema.MaxLength {
+		maxLength = *schema.MaxLength
 	}
 
 	if maxLength < schema.MinLength {

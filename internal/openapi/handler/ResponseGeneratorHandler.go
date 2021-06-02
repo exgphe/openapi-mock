@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"github.com/exgphe/kin-openapi/openapi3filter"
 	"github.com/exgphe/kin-openapi/routers"
+	"github.com/exgphe/kin-openapi/routers/legacy"
+	"github.com/exgphe/kin-openapi/routers/legacy/pathpattern"
 	"github.com/muonsoft/openapi-mock/database"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	"github.com/muonsoft/openapi-mock/internal/openapi/responder"
@@ -13,17 +15,18 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"strings"
 )
 
 type responseGeneratorHandler struct {
-	router            *routers.Router
+	router            *legacy.Router
 	responseGenerator generator.ResponseGenerator
 	responder         responder.Responder
 }
 
 func NewResponseGeneratorHandler(
-	router *routers.Router,
+	router *legacy.Router,
 	responseGenerator generator.ResponseGenerator,
 	responder responder.Responder,
 ) http.Handler {
@@ -43,9 +46,46 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	ctx := request.Context()
 	logger := logcontext.LoggerFromContext(ctx)
 
-	route, pathParameters, err := (*handler.router).FindRoute(request)
+	route, pathParameters, aErr := (*handler.router).FindRoute(request)
+	templateFileName := "requests.json"
+	_, err := os.Stat(templateFileName)
+	initialized := !os.IsNotExist(err)
+	if !initialized {
+		templateDb := database.Database{Content: ajson.ObjectNode("", make(map[string]*ajson.Node))}
 
-	if err != nil {
+		node := handler.router.Node()
+		var targetSuffix pathpattern.Suffix
+		for _, suffix := range node.Suffixes {
+			if suffix.Pattern == "GET " {
+				targetSuffix = suffix
+				break
+			}
+		}
+		dataRoots := targetSuffix.Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes
+		for _, root := range dataRoots {
+			rootRoute := root.Node.Value.(*routers.Route)
+			response, err := handler.responseGenerator.GenerateResponse(request, rootRoute)
+			if err != nil {
+				logger.Errorf("Create template error", err)
+				continue
+			}
+			responseData, _ := json.Marshal(response.Data)
+			responseNode, _ := ajson.Unmarshal(responseData)
+			key := responseNode.Keys()[0]
+			object, _ := responseNode.GetKey(key)
+			err = templateDb.Content.AppendObject(key, object)
+			if err != nil {
+				logger.Errorf("Whatever error", err)
+			}
+		}
+		err := templateDb.Save(templateFileName)
+		if err != nil {
+			logger.Errorf("Save Template DB Error", err)
+		}
+		http.NotFound(writer, request)
+		return
+	}
+	if route == nil || aErr != nil {
 		http.NotFound(writer, request)
 
 		logger.Debugf("Route '%s %s' was not found", request.Method, request.URL)
@@ -64,9 +104,16 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	err = openapi3filter.ValidateRequest(ctx, routingValidation)
 	var requestError *openapi3filter.RequestError
 	if errors.As(err, &requestError) {
-		http.NotFound(writer, request)
+		http.Error(writer, "400 Bad Request", http.StatusBadRequest)
 		logger.Infof("Route '%s %s' does not pass validation: %v", request.Method, request.URL, err.Error())
 
+		return
+	}
+	var operation = route.Operation
+
+	response, err := handler.responseGenerator.GenerateResponse(request, route)
+	if err != nil {
+		handler.responder.WriteError(ctx, writer, err)
 		return
 	}
 
@@ -84,9 +131,9 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 	}()
 
-	keyPath := database.RestconfPathToKeyPath(request.URL.Path)
+	keyPath := database.RestconfPathToKeyPath(request.URL.Path, operation)
 
-	if request.Method != "OPTIONS" && request.Body != http.NoBody && request.Body != nil && !strings.Contains(request.URL.Path, "restconf/operations/") {
+	if request.Body != http.NoBody && request.Body != nil && !strings.Contains(request.URL.Path, "restconf/operations/") {
 		defer func(Body io.ReadCloser) {
 			err := Body.Close()
 			if err != nil {
@@ -99,39 +146,95 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		} else {
 			body, err := ajson.Unmarshal(bodyData)
 			if err == nil {
+				//requestData, err := handler.responseGenerator.GenerateRequestData(request, route)
+				//exampleBodyData, _ := json.Marshal(requestData)
+				//exampleBodyNode, _ := ajson.Unmarshal(exampleBodyData)
 				switch request.Method {
-				case "POST":
+				case "POST", "PUT": // TODO not correct
 					bodyObject, err := body.GetObject()
 					if err != nil {
 						logger.Errorf("Body is not an object", err)
 					} else {
 						var underlyingNode *ajson.Node
+						var topKey string
 						for key := range bodyObject {
 							underlyingNode = bodyObject[key]
+							topKey = key
 						}
 						if underlyingNode == nil {
 							logger.Errorf("body is empty", err)
 						} else {
-							if underlyingNode.IsArray() {
-								arr, _ := underlyingNode.GetArray()
-								err = db.SetArrayNode(keyPath, arr)
-							} else {
-								obj, _ := underlyingNode.GetObject()
-								err = db.SetObjectNode(keyPath, obj)
+							isArray := false
+							if underlyingNode.IsObject() && len(underlyingNode.Keys()) == 1 {
+								key := underlyingNode.Keys()[0]
+								possiblyArray, err := underlyingNode.GetKey(key)
+								if err == nil && possiblyArray.IsArray() {
+									arr, _ := possiblyArray.GetArray()
+									arrKeyPath := keyPath + "[\"" + key + "\"]"
+									if request.Method == "POST" {
+										err := db.SetArrayNode(arrKeyPath, arr)
+										if err != nil {
+											logger.Errorf("Cannot set array node", err)
+										}
+									} else { // "PUT"
+										listKey := operation.RequestBody.Value.Content["application/yang-data+json"].Schema.Value.Properties[topKey].Value.Properties[key].Value.ExtensionProps.Extensions["x-key"].(json.RawMessage)
+										var listKeyString string
+										err := json.Unmarshal(listKey, &listKeyString)
+										if err != nil {
+											logger.Errorf("Unmarshal x-key error", err)
+										}
+										for _, node := range arr {
+											err := db.AppendNode(arrKeyPath, node, listKeyString) // verify id
+											if err != nil {
+												logger.Errorf("Cannot append node", err)
+											}
+										}
+									}
+									isArray = true
+								}
 							}
-							if err != nil {
-								logger.Errorf("Cannot Set Node", err)
+							if !isArray {
+								if underlyingNode.IsArray() {
+									arr, _ := underlyingNode.GetArray()
+									err = db.SetArrayNode(keyPath, arr)
+								} else {
+									obj, _ := underlyingNode.GetObject()
+									err = db.SetObjectNode(keyPath, obj)
+								}
+								if err != nil {
+									logger.Errorf("Cannot Set Node", err)
+								}
 							}
-						}
-					}
-				case "PUT":
-					underlyingNode, err := body.GetKey(body.Keys()[0])
-					if err != nil {
-						logger.Errorf("Cannot extract underlying node", err)
-					} else {
-						err := db.AppendNode(keyPath, underlyingNode)
-						if err != nil {
-							logger.Errorf("Cannot Append Body", err)
+							//nodes, err := exampleBodyNode.JSONPath(keyPath[1:])
+							//if err != nil {
+							//	logger.Errorf("Example node json path error", nodes, keyPath, err)
+							//} else if len(nodes) != 1 {
+							//	logger.Errorf("example node json path not unique", nodes, keyPath, err)
+							//} else {
+							//	node := nodes[0]
+							//	if node.IsArray() {
+							//		if underlyingNode.IsArray() {
+							//			arr, _ := underlyingNode.GetArray()
+							//			err = db.SetArrayNode(keyPath, arr)
+							//		} else {
+							//			err = db.AppendNode(keyPath, underlyingNode)
+							//		}
+							//		if err != nil {
+							//			logger.Errorf("Cannot Append Node", err)
+							//		}
+							//	} else {
+							//		if underlyingNode.IsArray() {
+							//			arr, _ := underlyingNode.GetArray()
+							//			err = db.SetArrayNode(keyPath, arr)
+							//		} else {
+							//			obj, _ := underlyingNode.GetObject()
+							//			err = db.SetObjectNode(keyPath, obj)
+							//		}
+							//		if err != nil {
+							//			logger.Errorf("Cannot Set Node", err)
+							//		}
+							//	}
+							//}
 						}
 					}
 				default:
@@ -143,21 +246,29 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 			}
 		}
 	}
-
-	response, err := handler.responseGenerator.GenerateResponse(request, route)
-	if err != nil {
-		handler.responder.WriteError(ctx, writer, err)
-		return
+	if request.Method == "DELETE" {
+		err := db.Set(keyPath, nil)
+		if err != nil {
+			logger.Errorf("Cannot Delete Node", keyPath, err)
+		}
 	}
 	// Try to read from database
 	if request.Method == "GET" && !strings.Contains(request.URL.Path, "restconf/operations/") {
 		entry, err := db.Get(keyPath)
 		if err == nil {
+			var namespacedKey string
+			for key := range response.Data.(map[string]interface{}) {
+				namespacedKey = key
+			}
 			err = json.Unmarshal(entry.Source(), &response.Data)
 			if err != nil {
 				logger.Errorf("Read database entry error", entry, err)
 			}
-			response.Data = map[string]interface{}{entry.Key(): response.Data}
+			response.Data = map[string]interface{}{namespacedKey: response.Data}
+		} else if err.Error() == "Key Path Empty Error" {
+			http.NotFound(writer, request)
+			logger.Debugf("Route '%s %s' was not found", request.Method, request.URL)
+			return
 		}
 	}
 
