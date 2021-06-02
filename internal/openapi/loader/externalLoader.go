@@ -1,12 +1,11 @@
 package loader
 
 import (
+	"github.com/exgphe/kin-openapi/openapi3"
 	"net/url"
-
-	"github.com/getkin/kin-openapi/openapi3"
 )
 
 type externalLoader interface {
-	LoadSwaggerFromURI(location *url.URL) (*openapi3.Swagger, error)
-	LoadSwaggerFromFile(path string) (*openapi3.Swagger, error)
+	LoadFromURI(location *url.URL) (*openapi3.T, error)
+	LoadFromFile(path string) (*openapi3.T, error)
 }

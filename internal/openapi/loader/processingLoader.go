@@ -1,16 +1,15 @@
 package loader
 
 import (
+	"github.com/exgphe/kin-openapi/openapi3"
 	"net/url"
-
-	"github.com/getkin/kin-openapi/openapi3"
 )
 
 type processingLoader struct {
 	loader SpecificationLoader
 }
 
-func (loader *processingLoader) LoadFromURI(uri string) (*openapi3.Swagger, error) {
+func (loader *processingLoader) LoadFromURI(uri string) (*openapi3.T, error) {
 	specification, err := loader.loader.LoadFromURI(uri)
 	if err != nil {
 		return nil, err

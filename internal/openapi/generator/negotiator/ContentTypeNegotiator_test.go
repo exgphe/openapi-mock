@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/stretchr/testify/assert"
 )
 

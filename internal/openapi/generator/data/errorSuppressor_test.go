@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/muonsoft/openapi-mock/pkg/logcontext"
 	"github.com/sirupsen/logrus"
 	"github.com/sirupsen/logrus/hooks/test"

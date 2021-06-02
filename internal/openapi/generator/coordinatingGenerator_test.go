@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/exgphe/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3filter"
 	contentmock "github.com/muonsoft/openapi-mock/test/mocks/openapi/generator/content"
 	negotiatormock "github.com/muonsoft/openapi-mock/test/mocks/openapi/generator/negotiator"
 	"github.com/stretchr/testify/mock"

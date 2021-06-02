@@ -5,7 +5,7 @@ package content
 import (
 	context "context"
 
-	openapi3 "github.com/getkin/kin-openapi/openapi3"
+	openapi3 "github.com/exgphe/kin-openapi/openapi3"
 	mock "github.com/stretchr/testify/mock"
 )
 

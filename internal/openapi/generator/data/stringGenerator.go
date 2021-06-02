@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/pkg/errors"
 	"syreclabs.com/go/faker"
 )

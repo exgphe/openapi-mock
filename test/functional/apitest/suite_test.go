@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/getkin/kin-openapi/openapi3filter"
+	"github.com/exgphe/kin-openapi/openapi3filter"
 	"github.com/muonsoft/openapi-mock/internal/application/config"
 	"github.com/muonsoft/openapi-mock/internal/application/di"
 	"github.com/stretchr/testify/suite"

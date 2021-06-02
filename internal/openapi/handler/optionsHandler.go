@@ -1,14 +1,13 @@
 package handler
 
 import (
+	"github.com/exgphe/kin-openapi/routers"
 	"net/http"
 	"strings"
-
-	"github.com/getkin/kin-openapi/openapi3filter"
 )
 
 type optionsHandler struct {
-	router      *openapi3filter.Router
+	router      *routers.Router
 	nextHandler http.Handler
 }
 
@@ -26,7 +25,7 @@ func (handler *optionsHandler) respond(writer http.ResponseWriter, request *http
 
 	// temporary solution until new routing based on patterns
 	for _, method := range possibleMethods {
-		_, _, err := handler.router.FindRoute(method, request.URL)
+		_, _, err := (*handler.router).FindRoute(request)
 		if err == nil {
 			allowedMethods = append(allowedMethods, method)
 		}

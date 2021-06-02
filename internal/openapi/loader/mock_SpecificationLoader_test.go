@@ -3,7 +3,7 @@
 package loader
 
 import (
-	openapi3 "github.com/getkin/kin-openapi/openapi3"
+	openapi3 "kin-openapi/openapi3"
 	mock "github.com/stretchr/testify/mock"
 )
 

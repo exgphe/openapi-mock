@@ -2,13 +2,14 @@ package di
 
 import (
 	"fmt"
+	"github.com/exgphe/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/routers"
+	"github.com/exgphe/kin-openapi/routers/legacy"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/getkin/kin-openapi/openapi3filter"
 	"github.com/gorilla/handlers"
 	"github.com/muonsoft/openapi-mock/internal/application/config"
 	responseGenerator "github.com/muonsoft/openapi-mock/internal/openapi/generator"
@@ -49,7 +50,7 @@ func (factory *Factory) CreateSpecificationLoader() loader.SpecificationLoader {
 	return loader.New()
 }
 
-func (factory *Factory) CreateHTTPHandler(router *openapi3filter.Router) http.Handler {
+func (factory *Factory) CreateHTTPHandler(router routers.Router) http.Handler {
 	generatorOptions := data.Options{
 		UseExamples:     factory.configuration.UseExamples,
 		NullProbability: factory.configuration.NullProbability,
@@ -65,7 +66,7 @@ func (factory *Factory) CreateHTTPHandler(router *openapi3filter.Router) http.Ha
 	apiResponder := responder.New()
 
 	var httpHandler http.Handler
-	httpHandler = handler.NewResponseGeneratorHandler(router, responseGeneratorInstance, apiResponder)
+	httpHandler = handler.NewResponseGeneratorHandler(&router, responseGeneratorInstance, apiResponder)
 	if factory.configuration.CORSEnabled {
 		httpHandler = middleware.CORSHandler(httpHandler)
 	}
@@ -102,7 +103,10 @@ func (factory *Factory) CreateHTTPServer() (server.Server, error) {
 
 	logger.Infof("OpenAPI specification was successfully loaded from '%s'", factory.configuration.SpecificationURL)
 
-	router := openapi3filter.NewRouter().WithSwagger(specification)
+	router, err := legacy.NewRouter(specification)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build router from OpenAPI specification from '%s': %w", factory.configuration.SpecificationURL, err)
+	}
 	httpHandler := factory.CreateHTTPHandler(router)
 
 	serverLogger := log.New(loggerWriter, "[HTTP]: ", log.LstdFlags)

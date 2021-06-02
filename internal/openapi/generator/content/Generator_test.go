@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3"
 	generatormock "github.com/muonsoft/openapi-mock/test/mocks/mock/generator"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -3,7 +3,7 @@ package data
 import (
 	"reflect"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/openapi3"
 )
 
 type schemaMerger interface {

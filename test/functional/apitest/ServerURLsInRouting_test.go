@@ -17,7 +17,7 @@ func (suite *APISuite) TestServerURLsInRouting_SendingGETToEndpointsWithGlobalAn
 		{"/global/base/path/endpoint"},
 		{"/another-global/base/path/endpoint"},
 		// Server override at path and endpoint level is not supported yet because it is not
-		// supported in https://github.com/getkin/kin-openapi
+		// supported in https://github.com/exgphe/kin-openapi
 		// {"/local/base/path/second-endpoint"},
 		// {"/another-local/base/path/second-endpoint"},
 		// {"/endpoint/base/path/third-endpoint"},
