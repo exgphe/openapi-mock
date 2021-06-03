@@ -3,10 +3,9 @@ package data
 import (
 	"context"
 	"fmt"
-
 	"github.com/exgphe/kin-openapi/openapi3"
+	"github.com/lucasjones/reggen"
 	"github.com/pkg/errors"
-	"syreclabs.com/go/faker"
 )
 
 type stringGenerator struct {
@@ -53,7 +52,7 @@ func (generator *stringGenerator) getRandomEnumValue(enum []interface{}) string 
 }
 
 func (generator *stringGenerator) generateValueByPattern(pattern string) (string, error) {
-	value, err := faker.Regexify(pattern)
+	g, err := reggen.NewGenerator(pattern)
 	if err != nil {
 		return "", errors.WithStack(&ErrGenerationFailed{
 			GeneratorID: "stringGenerator",
@@ -61,6 +60,6 @@ func (generator *stringGenerator) generateValueByPattern(pattern string) (string
 			Previous:    err,
 		})
 	}
-
+	value := g.Generate(10)
 	return value, nil
 }

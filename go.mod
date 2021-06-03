@@ -12,6 +12,7 @@ require (
 	github.com/golang/gddo v0.0.0-20200831202555-721e228c7686 // indirect
 	github.com/gorilla/handlers v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
+	github.com/lucasjones/reggen v0.0.0-20200904144131-37ba4fa293bb
 	github.com/muonsoft/api-testing v0.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0
@@ -22,5 +23,5 @@ require (
 	github.com/unrolled/secure v1.0.8
 	golang.org/x/sys v0.0.0-20201107080550-4d91cf3a1aaf // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
-	syreclabs.com/go/faker v1.2.2
+	syreclabs.com/go/faker v1.2.3
 )

@@ -149,97 +149,69 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 				//requestData, err := handler.responseGenerator.GenerateRequestData(request, route)
 				//exampleBodyData, _ := json.Marshal(requestData)
 				//exampleBodyNode, _ := ajson.Unmarshal(exampleBodyData)
-				switch request.Method {
-				case "POST", "PUT": // TODO not correct
-					bodyObject, err := body.GetObject()
-					if err != nil {
-						logger.Errorf("Body is not an object", err)
-					} else {
-						var underlyingNode *ajson.Node
-						var topKey string
-						for key := range bodyObject {
-							underlyingNode = bodyObject[key]
-							topKey = key
+				bodyObject, err := body.GetObject()
+				if err != nil {
+					logger.Errorf("Body is not an object", err)
+				} else {
+					var underlyingNode *ajson.Node
+					var topKey string
+					hasMultipleKey := false
+					for key := range bodyObject {
+						if hasMultipleKey && request.Method != "PATCH" {
+							http.Error(writer, "400 Bad Request", http.StatusBadRequest)
+							logger.Infof("Multiple Key in Request Body", request.Method, request.URL, bodyObject)
+							return
 						}
-						if underlyingNode == nil {
-							logger.Errorf("body is empty", err)
-						} else {
-							isArray := false
-							if underlyingNode.IsObject() && len(underlyingNode.Keys()) == 1 {
-								key := underlyingNode.Keys()[0]
-								possiblyArray, err := underlyingNode.GetKey(key)
-								if err == nil && possiblyArray.IsArray() {
-									arr, _ := possiblyArray.GetArray()
-									arrKeyPath := keyPath + "[\"" + key + "\"]"
-									if request.Method == "POST" {
-										err := db.SetArrayNode(arrKeyPath, arr)
-										if err != nil {
-											logger.Errorf("Cannot set array node", err)
-										}
-									} else { // "PUT"
-										listKey := operation.RequestBody.Value.Content["application/yang-data+json"].Schema.Value.Properties[topKey].Value.Properties[key].Value.ExtensionProps.Extensions["x-key"].(json.RawMessage)
-										var listKeyString string
-										err := json.Unmarshal(listKey, &listKeyString)
-										if err != nil {
-											logger.Errorf("Unmarshal x-key error", err)
-										}
-										for _, node := range arr {
-											err := db.AppendNode(arrKeyPath, node, listKeyString) // verify id
-											if err != nil {
-												logger.Errorf("Cannot append node", err)
-											}
-										}
-									}
-									isArray = true
+						underlyingNode = bodyObject[key]
+						topKey = key
+						hasMultipleKey = true
+					}
+					if underlyingNode == nil {
+						logger.Errorf("body is empty", err)
+					} else {
+						switch request.Method {
+						case "POST":
+							tokens := strings.Split(topKey, ":")
+							err := db.Post(keyPath, underlyingNode, tokens[1])
+							if err != nil {
+								if err.Error() == "409" {
+									http.Error(writer, "409 Conflicts", http.StatusConflict)
+									return
 								}
+								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
+								logger.Errorf("Post Error", err)
+								return
 							}
-							if !isArray {
-								if underlyingNode.IsArray() {
-									arr, _ := underlyingNode.GetArray()
-									err = db.SetArrayNode(keyPath, arr)
-								} else {
-									obj, _ := underlyingNode.GetObject()
-									err = db.SetObjectNode(keyPath, obj)
-								}
-								if err != nil {
-									logger.Errorf("Cannot Set Node", err)
-								}
+							response.StatusCode = http.StatusCreated
+							break
+						case "PUT":
+							created, err := db.Put(keyPath, underlyingNode)
+							if err != nil {
+								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
+								logger.Errorf("Put Error", err)
+								return
 							}
-							//nodes, err := exampleBodyNode.JSONPath(keyPath[1:])
-							//if err != nil {
-							//	logger.Errorf("Example node json path error", nodes, keyPath, err)
-							//} else if len(nodes) != 1 {
-							//	logger.Errorf("example node json path not unique", nodes, keyPath, err)
-							//} else {
-							//	node := nodes[0]
-							//	if node.IsArray() {
-							//		if underlyingNode.IsArray() {
-							//			arr, _ := underlyingNode.GetArray()
-							//			err = db.SetArrayNode(keyPath, arr)
-							//		} else {
-							//			err = db.AppendNode(keyPath, underlyingNode)
-							//		}
-							//		if err != nil {
-							//			logger.Errorf("Cannot Append Node", err)
-							//		}
-							//	} else {
-							//		if underlyingNode.IsArray() {
-							//			arr, _ := underlyingNode.GetArray()
-							//			err = db.SetArrayNode(keyPath, arr)
-							//		} else {
-							//			obj, _ := underlyingNode.GetObject()
-							//			err = db.SetObjectNode(keyPath, obj)
-							//		}
-							//		if err != nil {
-							//			logger.Errorf("Cannot Set Node", err)
-							//		}
-							//	}
-							//}
+							if created {
+								response.StatusCode = http.StatusCreated
+							} else {
+								response.StatusCode = http.StatusNoContent
+							}
+						case "PATCH":
+							err := db.Patch(keyPath, underlyingNode)
+							if err != nil {
+								if err.Error() == "404" {
+									http.Error(writer, "404 Not Found", http.StatusNotFound)
+									return
+								}
+								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
+								logger.Errorf("Put Error", err)
+								return
+							}
+						default:
+							logger.Errorf("Should not Happen", request.Method)
+							break
 						}
 					}
-				default:
-					logger.Errorf("Should not happen")
-					break
 				}
 			} else {
 				logger.Errorf("Cannot extract body", err)

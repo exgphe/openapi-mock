@@ -18,6 +18,10 @@ func (generator *regularArrayGenerator) SetSchemaGenerator(schemaGenerator schem
 
 func (generator *regularArrayGenerator) GenerateDataBySchema(ctx context.Context, schema *openapi3.Schema) (Data, error) {
 	var err error
+	_, ok := schema.Extensions["x-empty"]
+	if ok {
+		return []interface{}{nil}, nil
+	}
 
 	length := generator.generateRandomLength(schema)
 	values := make([]interface{}, length)
