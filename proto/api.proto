@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package openapi_validator;
+
+service Api {
+  rpc Validate (ValidationRequest) returns (ValidationResponse) {}
+}
+
+message ValidationRequest {
+  string code = 1;
+  string message = 2;
+}
+
+message ValidationResponse {
+  string code = 1;
+  string message = 2;
+}

@@ -2,10 +2,13 @@ package data
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/lucasjones/reggen"
 	"github.com/pkg/errors"
+	"math/rand"
+	"strconv"
 )
 
 type stringGenerator struct {
@@ -33,7 +36,12 @@ func (generator *stringGenerator) GenerateDataBySchema(ctx context.Context, sche
 	if len(schema.Enum) > 0 {
 		value = generator.getRandomEnumValue(schema.Enum)
 	} else if schema.Pattern != "" {
-		value, err = generator.generateValueByPattern(schema.Pattern)
+		_, ok := schema.Extensions["x-range"]
+		if ok {
+			value, err = generator.generateNumberString(schema)
+		} else {
+			value, err = generator.generateValueByPattern(schema.Pattern)
+		}
 	} else if formatGenerator, isSupported := generator.formatGenerators[schema.Format]; isSupported {
 		maxLength := 0
 		if schema.MaxLength != nil {
@@ -62,4 +70,29 @@ func (generator *stringGenerator) generateValueByPattern(pattern string) (string
 	}
 	value := g.Generate(10)
 	return value, nil
+}
+
+func (generator *stringGenerator) generateNumberString(schema *openapi3.Schema) (string, error) {
+	var xType string
+	err := json.Unmarshal(schema.Extensions["x-type"].(json.RawMessage), &xType)
+	if err != nil {
+		return "", err
+	}
+	var ranges []map[string]interface{}
+	err = json.Unmarshal(schema.Extensions["x-range"].(json.RawMessage), &ranges)
+	if err != nil {
+		return "", err
+	}
+	rang := ranges[rand.Intn(len(ranges))]
+	min, max := rang["min"].(float64), rang["max"].(float64)
+	var fractionDigits int
+	err = json.Unmarshal(schema.Extensions["x-fraction-digits"].(json.RawMessage), &fractionDigits)
+	if err != nil {
+		return "", err
+	}
+	if xType == "decimal64" {
+		return strconv.FormatFloat(min+rand.Float64()*(max-min), 'f', fractionDigits, 64), nil
+	} else {
+		return strconv.Itoa(int(min) + rand.Intn(int(max))), nil
+	}
 }

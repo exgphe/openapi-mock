@@ -22,6 +22,7 @@ require (
 	github.com/stretchr/testify v1.6.1
 	github.com/unrolled/secure v1.0.8
 	golang.org/x/sys v0.0.0-20201107080550-4d91cf3a1aaf // indirect
+	google.golang.org/grpc v1.21.1
 	gopkg.in/yaml.v3 v3.0.0-20200615113413-eeeca48fe776
 	syreclabs.com/go/faker v1.2.3
 )

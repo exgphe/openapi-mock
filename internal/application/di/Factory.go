@@ -20,6 +20,7 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/server/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/unrolled/secure"
+	"google.golang.org/grpc"
 )
 
 type Factory struct {
@@ -114,6 +115,11 @@ func (factory *Factory) CreateHTTPServer() (server.Server, error) {
 	logger.WithFields(factory.configuration.Dump()).Info("OpenAPI mock server was created")
 
 	return httpServer, nil
+}
+
+func (factory *Factory) CreateGRPCServer() (*grpc.Server, error) {
+	s := grpc.NewServer()
+	return s, nil
 }
 
 func createLogger(configuration *config.Configuration) *logrus.Logger {
