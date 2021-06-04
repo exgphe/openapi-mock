@@ -32,7 +32,10 @@ func newStringGenerator(random randomGenerator) schemaGenerator {
 func (generator *stringGenerator) GenerateDataBySchema(ctx context.Context, schema *openapi3.Schema) (Data, error) {
 	var value Data
 	var err error
-
+	maxLength := 0
+	if schema.MaxLength != nil {
+		maxLength = int(*schema.MaxLength)
+	}
 	if len(schema.Enum) > 0 {
 		value = generator.getRandomEnumValue(schema.Enum)
 	} else if schema.Pattern != "" {
@@ -40,13 +43,9 @@ func (generator *stringGenerator) GenerateDataBySchema(ctx context.Context, sche
 		if ok {
 			value, err = generator.generateNumberString(schema)
 		} else {
-			value, err = generator.generateValueByPattern(schema.Pattern)
+			value, err = generator.generateValueByPattern(schema.Pattern, maxLength)
 		}
 	} else if formatGenerator, isSupported := generator.formatGenerators[schema.Format]; isSupported {
-		maxLength := 0
-		if schema.MaxLength != nil {
-			maxLength = int(*schema.MaxLength)
-		}
 		value = formatGenerator(int(schema.MinLength), maxLength)
 	} else {
 		value, err = generator.textGenerator.GenerateDataBySchema(ctx, schema)
@@ -59,7 +58,7 @@ func (generator *stringGenerator) getRandomEnumValue(enum []interface{}) string 
 	return fmt.Sprint(enum[generator.random.Intn(len(enum))])
 }
 
-func (generator *stringGenerator) generateValueByPattern(pattern string) (string, error) {
+func (generator *stringGenerator) generateValueByPattern(pattern string, maxLength int) (string, error) {
 	g, err := reggen.NewGenerator(pattern)
 	if err != nil {
 		return "", errors.WithStack(&ErrGenerationFailed{
@@ -68,7 +67,10 @@ func (generator *stringGenerator) generateValueByPattern(pattern string) (string
 			Previous:    err,
 		})
 	}
-	value := g.Generate(10)
+	if maxLength <= 0 {
+		maxLength = defaultMaxLength
+	}
+	value := g.Generate(maxLength)
 	return value, nil
 }
 
