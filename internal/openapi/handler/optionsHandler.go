@@ -25,6 +25,7 @@ func (handler *optionsHandler) respond(writer http.ResponseWriter, request *http
 
 	// temporary solution until new routing based on patterns
 	for _, method := range possibleMethods {
+		request.Method = method
 		_, _, err := (*handler.router).FindRoute(request)
 		if err == nil {
 			allowedMethods = append(allowedMethods, method)
