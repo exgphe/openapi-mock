@@ -7,6 +7,7 @@ import (
 	"github.com/spyzhov/ajson"
 	"io/fs"
 	"io/ioutil"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -42,7 +43,7 @@ func Load(filename string) (db Database, err error) {
 	return
 }
 
-func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (keyPath string) {
+func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (keyPath string, err error) {
 	restconfPath = strings.Replace(restconfPath, "/restconf/data/", "", 1)
 	layers := strings.Split(restconfPath, "/")
 	keyPath = "$"
@@ -54,7 +55,7 @@ func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (
 				var name string
 				err := json.Unmarshal(originalName.(json.RawMessage), &name)
 				if err != nil {
-					panic(err)
+					return "", err
 				}
 				pathParameterKeys = append(pathParameterKeys, name)
 			} else {
@@ -72,7 +73,11 @@ func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (
 				if i > 0 {
 					keyPath = keyPath + "&&"
 				}
-				keyPath = keyPath + "@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==\"" + subtoken + "\""
+				subtokenUnescaped, err:= url.QueryUnescape(subtoken)
+				if err != nil {
+					return "", err
+				}
+				keyPath = keyPath + "@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==\"" + subtokenUnescaped + "\""
 				currentPathParameterKeyIndex++
 			}
 			keyPath = keyPath + ")]"

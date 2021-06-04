@@ -41,6 +41,7 @@ func New(options Options) MediaGenerator {
 		"oneOf":  &oneOfGenerator{random: random},
 		"allOf":  combinedGenerator,
 		"anyOf":  combinedGenerator,
+		"": newStringGenerator(random), // For anydata nodes
 	}
 
 	schemaGenerator := createCoordinatingSchemaGenerator(options, generatorsByType, random)

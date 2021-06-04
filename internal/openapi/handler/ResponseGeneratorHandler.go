@@ -131,7 +131,12 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 	}()
 
-	keyPath := database.RestconfPathToKeyPath(request.URL.Path, operation)
+	keyPath, err := database.RestconfPathToKeyPath(request.URL.Path, operation)
+	if err != nil {
+		http.Error(writer, "500 Internal Server Error", http.StatusInternalServerError)
+		logger.Errorf("Keypath convert error", err)
+		return
+	}
 
 	if request.Body != http.NoBody && request.Body != nil && !strings.Contains(request.URL.Path, "restconf/operations/") {
 		defer func(Body io.ReadCloser) {
