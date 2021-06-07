@@ -3,13 +3,16 @@ package database
 import (
 	"encoding/json"
 	"github.com/exgphe/kin-openapi/openapi3"
+	"github.com/gofrs/uuid"
 	"github.com/pkg/errors"
 	"github.com/spyzhov/ajson"
 	"io/fs"
 	"io/ioutil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type Key = string
@@ -24,12 +27,36 @@ type Database struct {
 	Content Dictionary
 }
 
+const lastModifiedKey = "@@last-modified"
+const eTagKey = "@@etag"
+
+type KeyPathNotFoundError struct {
+}
+
 type KeyPathEmptyError struct {
+}
+type KeyPathNotUniqueError struct {
+}
+type DataExistsError struct {
 }
 
 func (e *KeyPathEmptyError) Error() string { return "Key Path Empty Error" }
 
-func Load(filename string) (db Database, err error) {
+func (e *KeyPathNotUniqueError) Error() string { return "Key Path Not Unique" }
+
+func (e *KeyPathNotFoundError) Error() string { return "Key Path Not Found" }
+
+func (e *DataExistsError) Error() string { return "409" }
+
+func NewDatabase() (db *Database) {
+	db = &Database{
+		Content: ajson.ObjectNode("", make(map[string]*ajson.Node)),
+	}
+	_ = db.Modified()
+	return
+}
+
+func Load(filename string) (db *Database, err error) {
 	_, err = os.Stat(filename)
 	if !os.IsNotExist(err) {
 		// file exists
@@ -37,6 +64,9 @@ func Load(filename string) (db Database, err error) {
 		fileContent, err = ioutil.ReadFile(filename)
 		if err != nil {
 			return
+		}
+		db = &Database{
+			Content: nil,
 		}
 		db.Content, err = ajson.Unmarshal(fileContent)
 	}
@@ -73,11 +103,16 @@ func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (
 				if i > 0 {
 					keyPath = keyPath + "&&"
 				}
-				subtokenUnescaped, err:= url.QueryUnescape(subtoken)
+				subtokenUnescaped, err := url.PathUnescape(subtoken)
 				if err != nil {
 					return "", err
 				}
-				keyPath = keyPath + "@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==\"" + subtokenUnescaped + "\""
+				_, err = strconv.Atoi(subtokenUnescaped)
+				if err == nil {
+					keyPath = keyPath + "(@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==\"" + subtokenUnescaped + "\"||@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==" + subtokenUnescaped + ")"
+				} else {
+					keyPath = keyPath + "@[\"" + pathParameterKeys[currentPathParameterKeyIndex] + "\"]==\"" + subtokenUnescaped + "\""
+				}
 				currentPathParameterKeyIndex++
 			}
 			keyPath = keyPath + ")]"
@@ -88,13 +123,45 @@ func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (
 	return
 }
 
-func (db Database) Save(filename string) (err error) {
+func (db *Database) Save(filename string) (err error) {
 	fileData, err := ajson.Marshal(db.Content)
 	if err != nil {
 		return
 	}
 	err = ioutil.WriteFile(filename, fileData, fs.ModePerm)
 	return
+}
+
+func (db *Database) Modified() error {
+	err := db.Content.AppendObject(lastModifiedKey, ajson.StringNode(lastModifiedKey, time.Now().Format(time.RFC1123)))
+	if err != nil {
+		return err
+	}
+	v4, err := uuid.NewV4()
+	if err != nil {
+		return err
+	}
+	err = db.Content.AppendObject(eTagKey, ajson.StringNode(eTagKey, "\""+v4.String()+"\""))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (db *Database) GetLastModified() (lastModified string, err error) {
+	lastModifiedNode, err := db.Content.GetKey(lastModifiedKey)
+	if err != nil {
+		return
+	}
+	return lastModifiedNode.GetString()
+}
+
+func (db *Database) GetETag() (eTag string, err error) {
+	eTagNode, err := db.Content.GetKey(eTagKey)
+	if err != nil {
+		return
+	}
+	return eTagNode.GetString()
 }
 
 func (db *Database) Get(keyPath KeyPath) (value Value, err error) {
@@ -107,7 +174,7 @@ func (db *Database) Get(keyPath KeyPath) (value Value, err error) {
 		return
 	}
 	if len(nodes) > 1 {
-		err = errors.New("KeyPath Not Unique")
+		err = &KeyPathNotUniqueError{}
 		return
 	}
 	value = nodes[0]
@@ -135,7 +202,7 @@ func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
 				return err
 			}
 			if len(nodes) > 1 {
-				return errors.New("KeyPath Not Unique")
+				return &KeyPathNotUniqueError{}
 			}
 			if len(nodes) == 0 {
 				if !currentNode.IsArray() {
@@ -189,38 +256,29 @@ func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
 	return
 }
 
-func (db *Database) Set(keyPath KeyPath, value interface{}) (err error) {
-	err = db.EnsureKeyPath(keyPath)
-	if err != nil {
-		return
-	}
+func (db *Database) Delete(keyPath KeyPath) (err error) {
+	//err = db.EnsureKeyPath(keyPath)
+	//if err != nil {
+	//	return
+	//}
 	nodes, err := db.Content.JSONPath(keyPath)
 	if err != nil {
 		return err
 	}
+	if len(nodes) == 0 {
+		return &KeyPathNotFoundError{}
+	}
 	if len(nodes) != 1 {
-		return errors.New("KeyPath Not Unique")
+		return &KeyPathNotUniqueError{}
 	}
 	node := nodes[0]
-	if value == nil {
-		err = node.SetNull()
-	} else {
-		var marshal []byte
-		marshal, err = json.Marshal(value)
-		if err != nil {
-			return
-		}
-		var unmarshalled *ajson.Node
-		unmarshalled, err = ajson.Unmarshal(marshal)
-		if err != nil {
-			return
-		}
-		var object map[string]*ajson.Node
-		object, err = unmarshalled.GetObject()
-		if err != nil {
-			return
-		}
-		err = node.SetObject(object)
+	err = node.SetNull()
+	if err != nil {
+		return err
+	}
+	err = db.Modified()
+	if err != nil {
+		return err
 	}
 	return
 }
@@ -375,7 +433,7 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 				return false, err
 			}
 			if len(nodes) != 1 {
-				return false, errors.New("KeyPath Not Unique 2")
+				return false, &KeyPathNotUniqueError{}
 			}
 			err = node.AppendArray(node)
 			return true, err
@@ -384,7 +442,7 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 		}
 	}
 	if len(nodes) != 1 {
-		return false, errors.New("KeyPath Not Unique")
+		return false, &KeyPathNotUniqueError{}
 	}
 	targetNode := nodes[0]
 	nodeType := node.Type()
@@ -442,42 +500,117 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 	default:
 		return false, errors.New("Should not happen")
 	}
+	err = db.Modified()
+	if err != nil {
+		return false, err
+	}
 	return
 }
 
-func (db *Database) Post(keyPath string, node *ajson.Node, key string) (err error) {
+func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey string) (appendKey string, err error) {
 	err = db.EnsureKeyPath(keyPath)
 	if err != nil {
 		return
-	}
-	currentNodes, err := db.Content.JSONPath(keyPath + "[\"" + key + "\"]")
-	if err != nil {
-		return
-	}
-	if len(currentNodes) > 0 {
-		currentNode := currentNodes[0]
-		if !currentNode.IsNull() {
-			return errors.New("409")
-		}
 	}
 	parentNodes, err := db.Content.JSONPath(keyPath)
 	if err != nil {
 		return
 	}
 	if len(parentNodes) != 1 {
-		return errors.New("KeyPath Not Unique")
+		return "", &KeyPathNotUniqueError{}
 	}
 	parentNode := parentNodes[0]
-	if parentNode.IsArray() {
-		err := parentNode.AppendArray(node)
+	currentKeyPath := keyPath + "[\"" + key + "\"]"
+	currentNodes, err := db.Content.JSONPath(currentKeyPath)
+	if err != nil {
+		return "", err
+	}
+	if node.IsArray() {
+		nodeArray, err := node.GetArray()
 		if err != nil {
-			return err
+			return "", err
+		}
+		if len(nodeArray) == 0 {
+			return "", errors.New("No Item Found in the List")
+		}
+		if len(nodeArray) > 1 {
+			return "", errors.New("Cannot Create Multiple List Items at One Time")
+		}
+		element := nodeArray[0]
+		err = db.EnsureKeyPath(currentKeyPath)
+		if err != nil {
+			return "", err
+		}
+		listKeys := strings.Split(xKey, ",")
+		currentArrayElementKeyPath := currentKeyPath + "[?(@"
+		appendKey = key + "="
+		for i, listKey := range listKeys {
+			value, err := element.GetKey(listKey)
+			if err != nil {
+				return "", err
+			}
+			var valueString string
+			switch value.Type() {
+			case ajson.String:
+				valueString, _ = value.GetString()
+			case ajson.Bool:
+				realValue, _ := value.GetBool()
+				if realValue {
+					valueString = "true"
+				} else {
+					valueString = "false"
+				}
+			case ajson.Numeric:
+				realValue, _ := value.GetNumeric()
+				valueString = strconv.Itoa(int(realValue))
+			default:
+				return "", errors.New("Complex Key Type Currently Not Supported")
+			}
+			if i != 0 {
+				appendKey += ","
+				currentArrayElementKeyPath += "&&"
+			}
+			currentArrayElementKeyPath += "@[\"" + xKey + "\"]==\"" + valueString + "\""
+			appendKey += url.PathEscape(valueString)
+		}
+		currentArrayElementKeyPath += ")]"
+		currentArrayElementNodes, err := db.Content.JSONPath(currentArrayElementKeyPath)
+		if err != nil {
+			return "", err
+		}
+		if len(currentArrayElementNodes) > 0 {
+			return "", &DataExistsError{}
+		}
+		if len(currentNodes) == 0 {
+			return "", &KeyPathEmptyError{}
+		}
+		currentNode := currentNodes[0]
+		if !currentNode.IsArray() {
+			err := currentNode.SetArray([]*ajson.Node{})
+			if err != nil {
+				return "", err
+			}
+		}
+		err = currentNode.AppendArray(element)
+		if err != nil {
+			return "", err
 		}
 	} else {
-		err := parentNode.AppendObject(key, node)
-		if err != nil {
-			return err
+		if len(currentNodes) > 0 {
+			currentNode := currentNodes[0]
+			if !currentNode.IsNull() {
+				return "", &DataExistsError{}
+			}
 		}
+		err = parentNode.AppendObject(key, node)
+		appendKey = key
+		if err != nil {
+			return "", err
+		}
+	}
+	err = db.Modified()
+	if err != nil {
+		return
 	}
 	return
 }
@@ -488,10 +621,10 @@ func (db *Database) Patch(keyPath string, patchNode *ajson.Node) (err error) {
 		return
 	}
 	if len(parentNodes) == 0 {
-		return errors.New("404")
+		return &KeyPathNotFoundError{}
 	}
 	if len(parentNodes) != 1 {
-		return errors.New("KeyPath Not Unique")
+		return &KeyPathNotUniqueError{}
 	}
 	parentNode := parentNodes[0]
 	object, err := patchNode.GetObject()
@@ -503,6 +636,10 @@ func (db *Database) Patch(keyPath string, patchNode *ajson.Node) (err error) {
 		if err != nil {
 			return err
 		}
+	}
+	err = db.Modified()
+	if err != nil {
+		return err
 	}
 	return
 }

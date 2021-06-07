@@ -39,5 +39,5 @@ func (generator *coordinatingGenerator) GenerateResponse(request *http.Request, 
 
 func (generator *coordinatingGenerator) GenerateRequestData(request *http.Request, route *routers.Route) (interface{}, error) {
 	bestRequest := route.Operation.RequestBody.Value
-	return generator.contentGenerator.(*content.DelegatingGenerator).Matchers[0].Generator.(*content.MediaGenerator).ContentGenerator.GenerateData(request.Context(), bestRequest.GetMediaType("application/yang-data+json"))
+	return generator.contentGenerator.(*content.DelegatingGenerator).Matchers[0].Generator.(*content.MediaGenerator).ContentGenerator.GenerateData(request.Context(), bestRequest.GetMediaType("application/yang-data+json; charset=UTF-8"))
 }

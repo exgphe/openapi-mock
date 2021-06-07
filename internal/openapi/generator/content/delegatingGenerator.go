@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"regexp"
 
+	"errors"
 	"github.com/exgphe/kin-openapi/openapi3"
-	"github.com/muonsoft/openapi-mock/internal/errors"
 )
 
 type DelegatingGenerator struct {
@@ -29,5 +29,5 @@ func (processor *DelegatingGenerator) GenerateContent(ctx context.Context, respo
 		}
 	}
 
-	return nil, errors.NewNotSupported(fmt.Sprintf("generating response for content type '%s' is not supported", contentType))
+	return nil, errors.New(fmt.Sprintf("generating response for content type '%s' is not supported", contentType))
 }

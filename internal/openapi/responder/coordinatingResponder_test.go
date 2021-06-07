@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	apperrors "github.com/muonsoft/openapi-mock/internal/errors"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	serializermock "github.com/muonsoft/openapi-mock/test/mocks/openapi/responder/serializer"
 	"github.com/stretchr/testify/assert"
@@ -120,17 +119,17 @@ func TestCoordinatingResponder_WriteResponse_SerializationError_UnexpectedErrorW
 	assert.Contains(t, recorder.Body.String(), "An unexpected error occurred:<br>error")
 }
 
-func TestCoordinatingResponder_WriteError_UnsupportedFeatureError_UnsupportedPage(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	responder := New()
-	notSupported := &apperrors.NotSupported{Message: "unsupported feature description"}
-
-	responder.WriteError(context.Background(), recorder, notSupported)
-	response := recorder.Body.String()
-
-	assert.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))
-	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
-	assert.Contains(t, response, "<h1>Feature is not supported</h1>")
-	assert.Contains(t, response, "An error occurred: unsupported feature description.")
-	assert.Contains(t, response, "If you want this feature to be supported, please make an issue at the project page")
-}
+//func TestCoordinatingResponder_WriteError_UnsupportedFeatureError_UnsupportedPage(t *testing.T) {
+//	recorder := httptest.NewRecorder()
+//	responder := New()
+//	notSupported := &apperrors.NotSupported{Message: "unsupported feature description"}
+//
+//	responder.WriteError(context.Background(), recorder, notSupported)
+//	response := recorder.Body.String()
+//
+//	assert.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))
+//	assert.Equal(t, http.StatusInternalServerError, recorder.Code)
+//	assert.Contains(t, response, "<h1>Feature is not supported</h1>")
+//	assert.Contains(t, response, "An error occurred: unsupported feature description.")
+//	assert.Contains(t, response, "If you want this feature to be supported, please make an issue at the project page")
+//}

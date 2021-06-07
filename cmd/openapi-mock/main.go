@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os"
-
 	"github.com/muonsoft/openapi-mock/internal/application"
+	"os"
 )
 
 var (

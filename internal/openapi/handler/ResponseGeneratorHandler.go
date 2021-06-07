@@ -2,19 +2,22 @@ package handler
 
 import (
 	"encoding/json"
-	"github.com/exgphe/kin-openapi/openapi3filter"
+	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/exgphe/kin-openapi/routers"
 	"github.com/exgphe/kin-openapi/routers/legacy"
 	"github.com/exgphe/kin-openapi/routers/legacy/pathpattern"
 	"github.com/muonsoft/openapi-mock/database"
+	"github.com/muonsoft/openapi-mock/internal/openapi"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	"github.com/muonsoft/openapi-mock/internal/openapi/responder"
+	"github.com/muonsoft/openapi-mock/openapi-validator"
 	"github.com/muonsoft/openapi-mock/pkg/logcontext"
 	"github.com/pkg/errors"
 	"github.com/spyzhov/ajson"
-	"io"
+	"google.golang.org/grpc"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -46,12 +49,21 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	ctx := request.Context()
 	logger := logcontext.LoggerFromContext(ctx)
 
-	route, pathParameters, aErr := (*handler.router).FindRoute(request)
+	route, rawPathParameters, aErr := (*handler.router).FindRoute(request)
 	templateFileName := "requests.json"
+	pathParameters := map[string]string{}
+	for key, value := range rawPathParameters {
+		unescape, err := url.PathUnescape(value)
+		if err != nil {
+			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			return
+		}
+		pathParameters[key] = unescape
+	}
 	_, err := os.Stat(templateFileName)
 	initialized := !os.IsNotExist(err)
 	if !initialized {
-		templateDb := database.Database{Content: ajson.ObjectNode("", make(map[string]*ajson.Node))}
+		templateDb := database.NewDatabase()
 
 		node := handler.router.Node()
 		var targetSuffix pathpattern.Suffix
@@ -61,7 +73,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 				break
 			}
 		}
-		dataRoots := targetSuffix.Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes
+		dataRoots := targetSuffix.Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes // GET /restconf/data/*
 		for _, root := range dataRoots {
 			rootRoute := root.Node.Value.(*routers.Route)
 			response, err := handler.responseGenerator.GenerateResponse(request, rootRoute)
@@ -82,38 +94,76 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		if err != nil {
 			logger.Errorf("Save Template DB Error", err)
 		}
-		http.NotFound(writer, request)
+		handler.notFound(writer, request)
 		return
 	}
 	if route == nil || aErr != nil {
-		http.NotFound(writer, request)
+		handler.notFound(writer, request)
 
 		logger.Debugf("Route '%s %s' was not found", request.Method, request.URL)
 		return
 	}
-
-	routingValidation := &openapi3filter.RequestValidationInput{
-		Request:    request,
-		PathParams: pathParameters,
-		Route:      route,
-		Options: &openapi3filter.Options{
-			ExcludeRequestBody: true,
-		},
+	var bodyData []byte
+	if request.Body != http.NoBody && request.Body != nil {
+		bodyData, err = ioutil.ReadAll(request.Body)
+		defer request.Body.Close()
 	}
 
-	err = openapi3filter.ValidateRequest(ctx, routingValidation)
-	var requestError *openapi3filter.RequestError
-	if errors.As(err, &requestError) {
-		http.Error(writer, "400 Bad Request", http.StatusBadRequest)
-		logger.Infof("Route '%s %s' does not pass validation: %v", request.Method, request.URL, err.Error())
+	//routingValidation := &openapi3filter.RequestValidationInput{
+	//	Request:    request,
+	//	PathParams: pathParameters,
+	//	Route:      route,
+	//	Options: &openapi3filter.Options{
+	//		ExcludeRequestBody: true,
+	//	},
+	//}
+	//
+	//err = openapi3filter.ValidateRequest(ctx, routingValidation)
 
+	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure()) // TODO don't hard code
+	if err != nil {
+		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.New("Validation Server Down"))
+		return
+	}
+	defer conn.Close()
+	validationService := openapi_validator.NewApiClient(conn)
+
+	headers := map[string]string{}
+
+	for key, values := range request.Header {
+		headers[strings.ToLower(key)] = strings.Join(values, ", ")
+	}
+	queries := map[string]string{}
+	for key, values := range request.URL.Query() {
+		queries[key] = values[0]
+	}
+
+	validationResponse, err := validationService.Validate(ctx, &openapi_validator.ValidationRequest{
+		Path:               route.Path,
+		Method:             request.Method,
+		Headers:            headers,
+		Params:             pathParameters,
+		Query:              queries,
+		Body:               bodyData,
+		ValidatingResponse: false,
+	})
+	if err != nil {
+		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.WithMessage(err, "Validation Service Error"))
+		logger.Errorf("Validation Service Error", err)
+		return
+	}
+
+	//var requestError *openapi3filter.RequestError
+	if !validationResponse.Ok {
+		handler.badRequest(writer, request, errors.New(validationResponse.Message))
+		logger.Infof("Route '%s %s' does not pass validation: %s", request.Method, request.URL, validationResponse.Message)
 		return
 	}
 	var operation = route.Operation
 
 	response, err := handler.responseGenerator.GenerateResponse(request, route)
 	if err != nil {
-		handler.responder.WriteError(ctx, writer, err)
+		handler.responder.WriteError(ctx, writer, request.URL.Path, err)
 		return
 	}
 
@@ -121,7 +171,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	db, err := database.Load(filename)
 	if err != nil {
 		logger.Errorf("Json read error", err)
-		db = database.Database{Content: ajson.ObjectNode("", make(map[string]*ajson.Node))}
+		db = database.NewDatabase()
 	}
 
 	defer func() {
@@ -133,22 +183,33 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 
 	keyPath, err := database.RestconfPathToKeyPath(request.URL.Path, operation)
 	if err != nil {
-		http.Error(writer, "500 Internal Server Error", http.StatusInternalServerError)
+		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.WithMessage(err, "Keypath Convert Error"))
 		logger.Errorf("Keypath convert error", err)
 		return
 	}
 
-	if request.Body != http.NoBody && request.Body != nil && !strings.Contains(request.URL.Path, "restconf/operations/") {
-		defer func(Body io.ReadCloser) {
-			err := Body.Close()
-			if err != nil {
-				logger.Errorf("Cannot close body", err)
+	if !strings.Contains(request.URL.Path, "restconf/operations/") && request.Method != "DELETE" {
+		// Try to read from database
+		if request.Method == "GET" || request.Method == "HEAD" {
+			entry, err := db.Get(keyPath)
+			if err == nil {
+				var namespacedKey string
+				for key := range response.Data.(map[string]interface{}) {
+					namespacedKey = key
+				}
+				err = json.Unmarshal(entry.Source(), &response.Data)
+				if err != nil {
+					logger.Errorf("Read database entry error", entry, err)
+				}
+				if request.Method == "GET" {
+					response.Data = map[string]interface{}{namespacedKey: response.Data}
+				}
+			} else if err.Error() == "Key Path Empty Error" {
+				handler.notFound(writer, request)
+				logger.Debugf("Route '%s %s' was not found", request.Method, request.URL)
+				return
 			}
-		}(request.Body)
-		bodyData, err := ioutil.ReadAll(request.Body)
-		if err != nil {
-			logger.Errorf("Cannot read body", err)
-		} else {
+		} else if request.Method == "POST" || request.Method == "PUT" || request.Method == "PATCH" {
 			body, err := ajson.Unmarshal(bodyData)
 			if err == nil {
 				//requestData, err := handler.responseGenerator.GenerateRequestData(request, route)
@@ -162,9 +223,9 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 					var topKey string
 					hasMultipleKey := false
 					for key := range bodyObject {
-						if hasMultipleKey && request.Method != "PATCH" {
-							http.Error(writer, "400 Bad Request", http.StatusBadRequest)
-							logger.Infof("Multiple Key in Request Body", request.Method, request.URL, bodyObject)
+						if hasMultipleKey {
+							handler.badRequest(writer, request, errors.New("Multiple Key in Request Body"))
+							logger.Errorf("Multiple Key in Request Body", request.Method, request.URL, bodyObject)
 							return
 						}
 						underlyingNode = bodyObject[key]
@@ -177,22 +238,53 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 						switch request.Method {
 						case "POST":
 							tokens := strings.Split(topKey, ":")
-							err := db.Post(keyPath, underlyingNode, tokens[1])
-							if err != nil {
-								if err.Error() == "409" {
-									http.Error(writer, "409 Conflicts", http.StatusConflict)
+							var subKey string
+							if strings.Contains(request.URL.Path, tokens[0]+":") { // TODO seems inaccurate
+								subKey = tokens[1]
+							} else {
+								subKey = topKey
+							}
+							value := route.Operation.RequestBody.Value.Content["application/yang-data+json"].Schema.Value
+							var topProperty *openapi3.SchemaRef
+							topProperty, ok := value.Properties[topKey]
+							if !ok {
+								for _, ref := range value.OneOf {
+									topProperty, ok = ref.Value.Properties[topKey]
+									if ok {
+										break
+									}
+								}
+							}
+							rawXKey, ok := topProperty.Value.Extensions["x-key"]
+							var xKey string
+							if ok {
+								err := json.Unmarshal(rawXKey.(json.RawMessage), &xKey)
+								if err != nil {
+									handler.responder.WriteError(ctx, writer, request.URL.Path, err)
 									return
 								}
-								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
-								logger.Errorf("Post Error", err)
+							}
+							appendKey, err := db.Post(keyPath, underlyingNode, subKey, xKey)
+							if err != nil {
+								switch err.(type) {
+								case *database.DataExistsError:
+									handler.conflict(writer, request)
+								case *database.KeyPathNotFoundError:
+									handler.notFound(writer, request)
+								default:
+									handler.badRequest(writer, request, err)
+									logger.Errorf("Post Error", err)
+								}
 								return
 							}
+							writer.Header().Add("Location", request.URL.String()+"/"+appendKey)
 							response.StatusCode = http.StatusCreated
 							break
 						case "PUT":
+							// TODO check id does not change
 							created, err := db.Put(keyPath, underlyingNode)
 							if err != nil {
-								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
+								handler.badRequest(writer, request, err)
 								logger.Errorf("Put Error", err)
 								return
 							}
@@ -202,52 +294,100 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 								response.StatusCode = http.StatusNoContent
 							}
 						case "PATCH":
+							// TODO check id does not change
 							err := db.Patch(keyPath, underlyingNode)
 							if err != nil {
-								if err.Error() == "404" {
-									http.Error(writer, "404 Not Found", http.StatusNotFound)
-									return
+								switch err.(type) {
+								case *database.KeyPathNotFoundError:
+									handler.notFound(writer, request)
+								default:
+									handler.badRequest(writer, request, err)
+									logger.Errorf("Patch Error", err)
 								}
-								http.Error(writer, "400 Bad Request", http.StatusBadRequest)
-								logger.Errorf("Put Error", err)
 								return
 							}
 						default:
+							handler.badRequest(writer, request, errors.New("Should not Happen"))
 							logger.Errorf("Should not Happen", request.Method)
 							break
 						}
 					}
 				}
 			} else {
+				handler.badRequest(writer, request, errors.WithMessage(err, "Cannot extract body"))
 				logger.Errorf("Cannot extract body", err)
+				return
 			}
+		}
+		lastModified, err := db.GetLastModified()
+		if err != nil {
+			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			return
+		} else {
+			writer.Header().Add("Last-Modified", lastModified)
+		}
+		eTag, err := db.GetETag()
+		if err != nil {
+			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			return
+		} else {
+			writer.Header().Add("ETag", eTag)
 		}
 	}
 	if request.Method == "DELETE" {
-		err := db.Set(keyPath, nil)
+		err := db.Delete(keyPath)
 		if err != nil {
-			logger.Errorf("Cannot Delete Node", keyPath, err)
-		}
-	}
-	// Try to read from database
-	if request.Method == "GET" && !strings.Contains(request.URL.Path, "restconf/operations/") {
-		entry, err := db.Get(keyPath)
-		if err == nil {
-			var namespacedKey string
-			for key := range response.Data.(map[string]interface{}) {
-				namespacedKey = key
+			switch err.(type) {
+			case *database.KeyPathNotFoundError:
+				handler.notFound(writer, request)
+			default:
+				handler.badRequest(writer, request, err)
+				logger.Errorf("Cannot Delete Node", keyPath, err)
 			}
-			err = json.Unmarshal(entry.Source(), &response.Data)
-			if err != nil {
-				logger.Errorf("Read database entry error", entry, err)
-			}
-			response.Data = map[string]interface{}{namespacedKey: response.Data}
-		} else if err.Error() == "Key Path Empty Error" {
-			http.NotFound(writer, request)
-			logger.Debugf("Route '%s %s' was not found", request.Method, request.URL)
 			return
 		}
 	}
+	handler.responder.WriteResponse(ctx, writer, request.URL.Path, response)
+}
 
-	handler.responder.WriteResponse(ctx, writer, response)
+func (handler *responseGeneratorHandler) writeError(writer http.ResponseWriter, statusCode int, restconfErrors openapi.RestconfErrors) {
+	writer.Header().Set("Content-Type", "application/yang-data+json; charset=UTF-8")
+	writer.WriteHeader(statusCode)
+
+	marshal, _ := json.Marshal(restconfErrors)
+
+	_, _ = writer.Write(marshal)
+}
+
+func (handler *responseGeneratorHandler) notFound(writer http.ResponseWriter, request *http.Request) {
+	handler.writeError(writer,
+		http.StatusNotFound,
+		openapi.NewRestconfErrors(openapi.RestconfError{
+			ErrorType:    openapi.ErrorTypeProtocol,
+			ErrorTag:     openapi.ErrorTagInvalidValue,
+			ErrorPath:    request.URL.Path,
+			ErrorMessage: "Not Found",
+		}))
+}
+
+func (handler *responseGeneratorHandler) conflict(writer http.ResponseWriter, request *http.Request) {
+	handler.writeError(writer,
+		http.StatusConflict,
+		openapi.NewRestconfErrors(openapi.RestconfError{
+			ErrorType:    openapi.ErrorTypeProtocol,
+			ErrorTag:     openapi.ErrorTagResourceDenied,
+			ErrorPath:    request.URL.Path,
+			ErrorMessage: "Data already exists; cannot create new resource",
+		}))
+}
+
+func (handler *responseGeneratorHandler) badRequest(writer http.ResponseWriter, request *http.Request, err error) {
+	handler.writeError(writer,
+		http.StatusBadRequest,
+		openapi.NewRestconfErrors(openapi.RestconfError{
+			ErrorType:    openapi.ErrorTypeProtocol,
+			ErrorTag:     openapi.ErrorTagInvalidValue,
+			ErrorPath:    request.URL.Path,
+			ErrorMessage: err.Error(),
+		}))
 }

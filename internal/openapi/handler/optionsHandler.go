@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"encoding/json"
 	"github.com/exgphe/kin-openapi/routers/legacy"
+	"github.com/muonsoft/openapi-mock/internal/openapi"
 	"net/http"
 	"strings"
 )
@@ -15,15 +17,43 @@ func (handler *optionsHandler) ServeHTTP(writer http.ResponseWriter, request *ht
 	if request.Method == "OPTIONS" {
 		handler.respond(writer, request)
 	} else {
-		handler.nextHandler.ServeHTTP(writer, request)
+		allowedMethods := handler.getAllowedMethods(request)
+		methodAllowed := false
+		for _, method := range allowedMethods {
+			if method == request.Method {
+				methodAllowed = true
+				break
+			}
+		}
+		if methodAllowed {
+			handler.nextHandler.ServeHTTP(writer, request)
+		} else {
+			handler.methodNotAllowed(writer, request)
+		}
 	}
 }
 
 func (handler *optionsHandler) respond(writer http.ResponseWriter, request *http.Request) {
-	var allowedMethods []string
-	possibleMethods := []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
+	allowedMethods := handler.getAllowedMethods(request)
+	writer.Header().Set("Allow", strings.Join(allowedMethods, ", "))
+	acceptPatch := false
+	for _, method := range allowedMethods {
+		if method == "PATCH" {
+			acceptPatch = true
+			break
+		}
+	}
+	if acceptPatch {
+		writer.Header().Set("Accept-Patch", "application/yang-data+json; charset=UTF-8")
+	}
+	writer.WriteHeader(http.StatusOK)
+}
 
+func (handler *optionsHandler) getAllowedMethods(request *http.Request) []string {
+	allowedMethods := []string{"OPTIONS"}
+	possibleMethods := []string{"HEAD", "GET", "POST", "PUT", "PATCH", "DELETE"}
 	// temporary solution until new routing based on patterns
+	originalMethod := request.Method
 	for _, method := range possibleMethods {
 		request.Method = method
 		_, _, err := (*handler.router).FindRoute(request)
@@ -31,7 +61,22 @@ func (handler *optionsHandler) respond(writer http.ResponseWriter, request *http
 			allowedMethods = append(allowedMethods, method)
 		}
 	}
+	request.Method = originalMethod
+	return allowedMethods
+}
 
-	writer.Header().Set("Allow", strings.Join(allowedMethods, ","))
-	writer.WriteHeader(http.StatusOK)
+func (handler *optionsHandler) methodNotAllowed(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/yang-data+json; charset=UTF-8")
+	writer.WriteHeader(http.StatusMethodNotAllowed)
+
+	restconfErrors := openapi.NewRestconfErrors(openapi.RestconfError{
+		ErrorType:    openapi.ErrorTypeProtocol,
+		ErrorTag:     openapi.ErrorTagOperationNotSuported,
+		ErrorPath:    request.URL.Path,
+		ErrorMessage: "Method Not Allowed",
+	})
+
+	marshal, _ := json.Marshal(restconfErrors)
+
+	_, _ = writer.Write(marshal)
 }

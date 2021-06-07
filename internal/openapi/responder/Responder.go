@@ -10,8 +10,8 @@ import (
 )
 
 type Responder interface {
-	WriteResponse(ctx context.Context, writer http.ResponseWriter, response *generator.Response)
-	WriteError(ctx context.Context, writer http.ResponseWriter, err error)
+	WriteResponse(ctx context.Context, writer http.ResponseWriter, path string, response *generator.Response)
+	WriteError(ctx context.Context, writer http.ResponseWriter, path string, err error)
 }
 
 func New() Responder {

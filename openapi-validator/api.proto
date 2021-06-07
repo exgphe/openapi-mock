@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option go_package = "/openapi-validator;openapi_validator";
+
+package openapi_validator;
+
+service Api {
+    rpc Validate (ValidationRequest) returns (ValidationResponse) {}
+}
+
+message ValidationRequest {
+    string path = 1;
+    string method = 2;
+    map<string, string> headers = 3;
+    map<string, string> params = 4;
+    map<string, string> query = 5;
+    bytes body = 6;
+    bool validating_response = 7;
+}
+
+message ValidationResponse {
+    bool ok = 1;
+    string message = 2;
+}
