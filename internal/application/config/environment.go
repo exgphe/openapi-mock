@@ -20,6 +20,8 @@ type environmentConfiguration struct {
 	NullProbability *float64 `split_words:"true"`
 	SuppressErrors  *bool    `split_words:"true"`
 	UseExamples     *string  `split_words:"true"`
+
+	GrpcPort *uint16 `split_words:"true"`
 }
 
 func updateConfigFromEnvironment(fileConfig *fileConfiguration) {
@@ -46,6 +48,7 @@ func updateConfigFromEnvironment(fileConfig *fileConfiguration) {
 	fileConfig.Generation.NullProbability = coalesceFloat(fileConfig.Generation.NullProbability, envConfig.NullProbability)
 	fileConfig.Generation.SuppressErrors = coalesceBool(fileConfig.Generation.SuppressErrors, envConfig.SuppressErrors)
 	fileConfig.Generation.UseExamples = coalesceString(fileConfig.Generation.UseExamples, envConfig.UseExamples)
+	fileConfig.GrpcPort = coalesceUint16(fileConfig.GrpcPort, envConfig.GrpcPort)
 }
 
 func coalesceString(v1 string, v2 *string) string {

@@ -32,9 +32,11 @@ type Configuration struct {
 	DefaultMaxFloat float64
 	SuppressErrors  bool
 	DatabasePath    string
+	GrpcPort        uint16
 }
 
 const (
+	DefaultGrpcPort        = uint16(50051)
 	DefaultPort            = uint16(8080)
 	DefaultResponseTimeout = time.Hour
 	DefaultLogLevel        = logrus.InfoLevel

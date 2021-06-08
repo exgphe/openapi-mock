@@ -71,7 +71,7 @@ func (factory *Factory) CreateHTTPHandler(router *legacy.Router) http.Handler {
 	apiResponder := responder.New()
 
 	var httpHandler http.Handler
-	httpHandler = handler.NewResponseGeneratorHandler(router, responseGeneratorInstance, apiResponder, factory.configuration.DatabasePath)
+	httpHandler = handler.NewResponseGeneratorHandler(router, responseGeneratorInstance, apiResponder, factory.configuration.DatabasePath, factory.configuration.GrpcPort)
 	if factory.configuration.CORSEnabled {
 		httpHandler = middleware.CORSHandler(httpHandler)
 	}

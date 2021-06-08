@@ -65,7 +65,7 @@ func TestWriteResponse_GivenResponse_SerializedDataWritten(t *testing.T) {
 			responder := New().(*coordinatingResponder)
 			responder.serializer = serializer
 
-			responder.WriteResponse(context.Background(), recorder, response)
+			responder.WriteResponse(context.Background(), recorder, "", response)
 
 			serializer.AssertExpectations(t)
 			assert.Equal(t, response.ContentType+"; charset=utf-8", recorder.Header().Get("Content-Type"))
@@ -87,7 +87,7 @@ func TestCoordinatingResponder_WriteResponse_NoContentResponse_EmptyBodyWritten(
 	responder := New().(*coordinatingResponder)
 	responder.serializer = serializer
 
-	responder.WriteResponse(context.Background(), recorder, response)
+	responder.WriteResponse(context.Background(), recorder, "", response)
 
 	serializer.AssertExpectations(t)
 	assert.Equal(t, "", recorder.Header().Get("Content-Type"))
@@ -110,7 +110,7 @@ func TestCoordinatingResponder_WriteResponse_SerializationError_UnexpectedErrorW
 	responder := New().(*coordinatingResponder)
 	responder.serializer = serializer
 
-	responder.WriteResponse(context.Background(), recorder, response)
+	responder.WriteResponse(context.Background(), recorder, "", response)
 
 	serializer.AssertExpectations(t)
 	assert.Equal(t, "text/html; charset=utf-8", recorder.Header().Get("Content-Type"))

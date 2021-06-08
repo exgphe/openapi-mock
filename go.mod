@@ -10,10 +10,8 @@ require (
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/golang/gddo v0.0.0-20200831202555-721e228c7686 // indirect
-	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gorilla/handlers v1.5.1
 	github.com/kelseyhightower/envconfig v1.4.0
-	github.com/lucasjones/reggen v0.0.0-20200904144131-37ba4fa293bb
 	github.com/muonsoft/api-testing v0.2.0
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

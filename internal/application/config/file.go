@@ -14,6 +14,7 @@ type fileConfiguration struct {
 	HTTP        httpConfiguration        `json:"http" yaml:"http"`
 	Application applicationConfiguration `json:"application" yaml:"application"`
 	Generation  generationConfiguration  `json:"generation" yaml:"generation"`
+	GrpcPort    *uint16                  `json:"grpc_port" yaml:"grpc_port"`
 }
 
 type openapiConfiguration struct {

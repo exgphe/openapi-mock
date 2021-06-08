@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/exgphe/kin-openapi/openapi3"
-	"github.com/lucasjones/reggen"
+	"github.com/muonsoft/openapi-mock/internal/openapi/generator/reggen"
 	"github.com/pkg/errors"
 	"math/rand"
 	"strconv"
+	"strings"
 )
 
 type stringGenerator struct {
@@ -59,6 +60,10 @@ func (generator *stringGenerator) getRandomEnumValue(enum []interface{}) string 
 }
 
 func (generator *stringGenerator) generateValueByPattern(pattern string, maxLength int) (string, error) {
+	if strings.HasPrefix(pattern, "(?=") {
+		// Only pick the first pattern
+		pattern = pattern[3:strings.Index(pattern, ")(?=")]
+	}
 	g, err := reggen.NewGenerator(pattern)
 	if err != nil {
 		return "", errors.WithStack(&ErrGenerationFailed{

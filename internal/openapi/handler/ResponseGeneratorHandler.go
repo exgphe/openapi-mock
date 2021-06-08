@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,7 @@ type responseGeneratorHandler struct {
 	responseGenerator generator.ResponseGenerator
 	responder         responder.Responder
 	databasePath      string
+	grpcPort          uint16
 }
 
 func NewResponseGeneratorHandler(
@@ -33,12 +35,14 @@ func NewResponseGeneratorHandler(
 	responseGenerator generator.ResponseGenerator,
 	responder responder.Responder,
 	databasePath string,
+	grpcPort uint16,
 ) http.Handler {
 	generatorHandler := &responseGeneratorHandler{
 		router:            router,
 		responseGenerator: responseGenerator,
 		responder:         responder,
 		databasePath:      databasePath,
+		grpcPort:          grpcPort,
 	}
 
 	return &optionsHandler{
@@ -89,7 +93,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	//
 	//err = openapi3filter.ValidateRequest(ctx, routingValidation)
 
-	conn, err := grpc.Dial("localhost:50051", grpc.WithInsecure()) // TODO don't hard code
+	conn, err := grpc.Dial("localhost:"+strconv.Itoa(int(handler.grpcPort)), grpc.WithInsecure()) // TODO don't hard code
 	if err != nil {
 		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.New("Validation Server Down"))
 		return
@@ -327,27 +331,27 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 }
 
 func (handler *responseGeneratorHandler) checkListKeyLeafValuesChanged(writer http.ResponseWriter, request *http.Request, underlyingNode *ajson.Node, route *routers.Route, pathParameters map[string]string, listKeys []string, ctx context.Context) bool {
-	//if underlyingNode.IsArray() {
-	//	underlyingNodeElements, _ := underlyingNode.GetArray()
-	//	underlyingNodeElement := underlyingNodeElements[0]
-	//	var pathParameterOrder []string
-	//	for _, parameter := range route.Operation.Parameters {
-	//		if parameter.Value.In == "path" {
-	//			pathParameterOrder = append(pathParameterOrder, pathParameters[parameter.Value.Name])
-	//		}
-	//	}
-	//	//pathParameterOrderLen := len(pathParameterOrder)
-	//	//for i, listKey := range listKeys {
-	//	//	value, err := underlyingNodeElement.GetKey(listKey)
-	//	//	if err != nil {
-	//	//		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.WithMessage(err, "Error When Trying To Read List Key: "+listKey))
-	//	//	}
-	//		//if pathParameterOrder[pathParameterOrderLen-i-1] != value.String() {
-	//		//	handler.badRequest(writer, request, errors.New("The "+strings.ToUpper(route.Method)+" method MUST NOT be used to change the key leaf values for a data resource instance"))
-	//		//	return true
-	//		//}
-	//	//}
-	//}
+	if underlyingNode.IsArray() {
+		underlyingNodeElements, _ := underlyingNode.GetArray()
+		underlyingNodeElement := underlyingNodeElements[0]
+		var pathParameterOrder []string
+		for _, parameter := range route.Operation.Parameters {
+			if parameter.Value.In == "path" {
+				pathParameterOrder = append(pathParameterOrder, pathParameters[parameter.Value.Name])
+			}
+		}
+		pathParameterOrderLen := len(pathParameterOrder)
+		for i, listKey := range listKeys {
+			value, err := underlyingNodeElement.GetKey(listKey)
+			if err != nil {
+				continue
+			}
+			if pathParameterOrder[pathParameterOrderLen-i-1] != strings.TrimSuffix(strings.TrimPrefix(value.String(), "\""), "\"") {
+				handler.badRequest(writer, request, errors.New("The "+strings.ToUpper(route.Method)+" method MUST NOT be used to change the key leaf values for a data resource instance"))
+				return true
+			}
+		}
+	}
 	return false
 }
 

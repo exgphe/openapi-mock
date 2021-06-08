@@ -24,6 +24,7 @@ type Options struct {
 	DryRun            bool
 	overrideArguments bool
 	DatabasePath      string
+	GrpcPort          uint16
 }
 
 type OptionFunc func(options *Options)
