@@ -196,7 +196,7 @@ func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
 		if strings.HasSuffix(path, "\"") {
 			path = path[:len(path)-1]
 		}
-		if strings.Contains(path, "?(@") {
+		if strings.Contains(path, "?") && strings.Contains(path, "@") {
 			nodes, err := currentNode.JSONPath("$[" + path + "]")
 			if err != nil {
 				return err
@@ -221,7 +221,7 @@ func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
 			appended := false
 			if i < len(paths)-1 {
 				nextPath := paths[i+1]
-				if strings.Contains(nextPath, "?(@") {
+				if strings.Contains(nextPath, "?") && strings.Contains(nextPath, "@") {
 					if !currentNode.IsObject() {
 						err := currentNode.SetObject(map[string]*ajson.Node{})
 						if err != nil {
@@ -272,7 +272,7 @@ func (db *Database) Delete(keyPath KeyPath) (err error) {
 		return &KeyPathNotUniqueError{}
 	}
 	node := nodes[0]
-	err = node.SetNull()
+	err = node.Delete()
 	if err != nil {
 		return err
 	}
@@ -421,9 +421,10 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 		return
 	}
 	if len(nodes) == 0 {
+		// Is Array
 		paths, _ := ajson.ParseJSONPath(keyPath)
 		lastPath := paths[len(paths)-1]
-		if strings.Contains(lastPath, "?(@") {
+		if strings.Contains(lastPath, "?") && strings.Contains(lastPath, "@") {
 			parentKeyPath := "$"
 			for _, s := range paths[1 : len(paths)-1] {
 				parentKeyPath += "[" + s + "]"
@@ -435,7 +436,11 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 			if len(nodes) != 1 {
 				return false, &KeyPathNotUniqueError{}
 			}
-			err = node.AppendArray(node)
+			nodeElements, err := node.GetArray()
+			if err != nil {
+				return false, err
+			}
+			err = nodes[0].AppendArray(nodeElements[0])
 			return true, err
 		} else {
 			return false, &KeyPathEmptyError{}
@@ -457,7 +462,11 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 		if err != nil {
 			return false, err
 		}
-		err = targetNode.SetArray(value)
+		valueObject, err := value[0].GetObject()
+		if err != nil {
+			return false, err
+		}
+		err = targetNode.SetObject(valueObject)
 		if err != nil {
 			return false, err
 		}
@@ -507,7 +516,7 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 	return
 }
 
-func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey string) (appendKey string, err error) {
+func (db *Database) Post(keyPath string, node *ajson.Node, key string, listKeys []string) (appendKey string, err error) {
 	err = db.EnsureKeyPath(keyPath)
 	if err != nil {
 		return
@@ -541,8 +550,7 @@ func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey stri
 		if err != nil {
 			return "", err
 		}
-		listKeys := strings.Split(xKey, ",")
-		currentArrayElementKeyPath := currentKeyPath + "[?(@"
+		currentArrayElementKeyPath := currentKeyPath + "[?("
 		appendKey = key + "="
 		for i, listKey := range listKeys {
 			value, err := element.GetKey(listKey)
@@ -553,6 +561,7 @@ func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey stri
 			switch value.Type() {
 			case ajson.String:
 				valueString, _ = value.GetString()
+				currentArrayElementKeyPath += "@[\"" + listKey + "\"]==\"" + valueString + "\""
 			case ajson.Bool:
 				realValue, _ := value.GetBool()
 				if realValue {
@@ -560,9 +569,11 @@ func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey stri
 				} else {
 					valueString = "false"
 				}
+				currentArrayElementKeyPath += "@[\"" + listKey + "\"]==" + valueString
 			case ajson.Numeric:
 				realValue, _ := value.GetNumeric()
 				valueString = strconv.Itoa(int(realValue))
+				currentArrayElementKeyPath += "@[\"" + listKey + "\"]==" + valueString
 			default:
 				return "", errors.New("Complex Key Type Currently Not Supported")
 			}
@@ -570,7 +581,6 @@ func (db *Database) Post(keyPath string, node *ajson.Node, key string, xKey stri
 				appendKey += ","
 				currentArrayElementKeyPath += "&&"
 			}
-			currentArrayElementKeyPath += "@[\"" + xKey + "\"]==\"" + valueString + "\""
 			appendKey += url.PathEscape(valueString)
 		}
 		currentArrayElementKeyPath += ")]"
@@ -627,7 +637,13 @@ func (db *Database) Patch(keyPath string, patchNode *ajson.Node) (err error) {
 		return &KeyPathNotUniqueError{}
 	}
 	parentNode := parentNodes[0]
-	object, err := patchNode.GetObject()
+	var object map[string]*ajson.Node
+	if patchNode.IsArray() {
+		array, _ := patchNode.GetArray()
+		object, err = array[0].GetObject()
+	} else {
+		object, err = patchNode.GetObject()
+	}
 	if err != nil {
 		return err
 	}

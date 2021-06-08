@@ -67,11 +67,11 @@ func (generator *stringGenerator) generateValueByPattern(pattern string, maxLeng
 			Previous:    err,
 		})
 	}
-	if maxLength <= 0 {
-		maxLength = defaultMaxLength
+	if maxLength > 39 {
+		maxLength = 39
 	}
 	value := g.Generate(maxLength)
-	return value, nil
+	return fmt.Sprintf("%s", value), nil
 }
 
 func (generator *stringGenerator) generateNumberString(schema *openapi3.Schema) (string, error) {
@@ -87,14 +87,19 @@ func (generator *stringGenerator) generateNumberString(schema *openapi3.Schema) 
 	}
 	rang := ranges[rand.Intn(len(ranges))]
 	min, max := rang["min"].(float64), rang["max"].(float64)
-	var fractionDigits int
-	err = json.Unmarshal(schema.Extensions["x-fraction-digits"].(json.RawMessage), &fractionDigits)
-	if err != nil {
-		return "", err
-	}
 	if xType == "decimal64" {
+		var fractionDigits int
+		err = json.Unmarshal(schema.Extensions["x-fraction-digits"].(json.RawMessage), &fractionDigits)
+		if err != nil {
+			return "", err
+		}
 		return strconv.FormatFloat(min+rand.Float64()*(max-min), 'f', fractionDigits, 64), nil
 	} else {
-		return strconv.Itoa(int(min) + rand.Intn(int(max))), nil
+		if xType == "uint64" {
+			return strconv.FormatUint(uint64(min+rand.Float64()*max), 10), nil
+		} else {
+			// "int64"
+			return strconv.FormatInt(int64(min+rand.Float64()*max), 10), nil
+		}
 	}
 }

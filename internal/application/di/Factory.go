@@ -1,9 +1,15 @@
 package di
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/exgphe/kin-openapi/openapi3"
+	"github.com/exgphe/kin-openapi/routers"
 	"github.com/exgphe/kin-openapi/routers/legacy"
+	"github.com/exgphe/kin-openapi/routers/legacy/pathpattern"
+	"github.com/muonsoft/openapi-mock/database"
+	"github.com/spyzhov/ajson"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -20,7 +26,6 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/server/middleware"
 	"github.com/sirupsen/logrus"
 	"github.com/unrolled/secure"
-	"google.golang.org/grpc"
 )
 
 type Factory struct {
@@ -66,7 +71,7 @@ func (factory *Factory) CreateHTTPHandler(router *legacy.Router) http.Handler {
 	apiResponder := responder.New()
 
 	var httpHandler http.Handler
-	httpHandler = handler.NewResponseGeneratorHandler(router, responseGeneratorInstance, apiResponder)
+	httpHandler = handler.NewResponseGeneratorHandler(router, responseGeneratorInstance, apiResponder, factory.configuration.DatabasePath)
 	if factory.configuration.CORSEnabled {
 		httpHandler = middleware.CORSHandler(httpHandler)
 	}
@@ -117,9 +122,72 @@ func (factory *Factory) CreateHTTPServer() (server.Server, error) {
 	return httpServer, nil
 }
 
-func (factory *Factory) CreateGRPCServer() (*grpc.Server, error) {
-	s := grpc.NewServer()
-	return s, nil
+func (factory *Factory) InitializeDatabase() error {
+	logger := factory.GetLogger()
+
+	specificationLoader := factory.CreateSpecificationLoader()
+	specification, err := specificationLoader.LoadFromURI(factory.configuration.SpecificationURL)
+	if err != nil {
+		return fmt.Errorf("failed to load OpenAPI specification from '%s': %w", factory.configuration.SpecificationURL, err)
+	}
+
+	logger.Infof("OpenAPI specification was successfully loaded from '%s'", factory.configuration.SpecificationURL)
+
+	router, err := legacy.NewRouter(specification)
+	if err != nil {
+		return fmt.Errorf("failed to build router from OpenAPI specification from '%s': %w", factory.configuration.SpecificationURL, err)
+	}
+	ctx := context.Background()
+	emptyRequest := http.Request{}
+	request := emptyRequest.WithContext(ctx)
+	templateFileName := factory.configuration.DatabasePath
+	templateDb := database.NewDatabase()
+
+	node := router.Node()
+	var targetSuffix pathpattern.Suffix
+	for _, suffix := range node.Suffixes {
+		if suffix.Pattern == "GET " {
+			targetSuffix = suffix
+			break
+		}
+	}
+	dataRoots := targetSuffix.Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes // GET /restconf/data/*
+	generatorOptions := data.Options{
+		UseExamples:     factory.configuration.UseExamples,
+		NullProbability: factory.configuration.NullProbability,
+		DefaultMinInt:   factory.configuration.DefaultMinInt,
+		DefaultMaxInt:   factory.configuration.DefaultMaxInt,
+		DefaultMinFloat: factory.configuration.DefaultMinFloat,
+		DefaultMaxFloat: factory.configuration.DefaultMaxFloat,
+		SuppressErrors:  factory.configuration.SuppressErrors,
+	}
+
+	dataGeneratorInstance := data.New(generatorOptions)
+	responseGeneratorInstance := responseGenerator.New(dataGeneratorInstance)
+	for _, root := range dataRoots {
+		logger.Info("Generating ", root)
+		rootRoute := root.Node.Value.(*routers.Route)
+		response, err := responseGeneratorInstance.GenerateResponse(request, rootRoute)
+		if err != nil {
+			logger.Errorf("Create template error", err)
+			return err
+		}
+		responseData, _ := json.Marshal(response.Data)
+		responseNode, _ := ajson.Unmarshal(responseData)
+		key := responseNode.Keys()[0]
+		object, _ := responseNode.GetKey(key)
+		err = templateDb.Content.AppendObject(key, object)
+		if err != nil {
+			logger.Errorf("Whatever error", err)
+			return err
+		}
+	}
+	err = templateDb.Save(templateFileName)
+	if err != nil {
+		logger.Errorf("Save Template DB Error", err)
+		return err
+	}
+	return nil
 }
 
 func createLogger(configuration *config.Configuration) *logrus.Logger {

@@ -23,6 +23,7 @@ type Options struct {
 	Arguments         []string
 	DryRun            bool
 	overrideArguments bool
+	DatabasePath      string
 }
 
 type OptionFunc func(options *Options)
@@ -81,12 +82,20 @@ func newMainCommand(opts *Options) *cobra.Command {
 		"",
 		`URL or path to file with OpenAPI v3 specification. Overrides specification defined in configuration file or environment variable.`,
 	)
+	mainCommand.PersistentFlags().StringVarP(
+		&opts.DatabasePath,
+		"database",
+		"d",
+		"requests.json",
+		`JSON database file to store RESTCONF datastore`,
+	)
 	mainCommand.PersistentFlags().BoolVar(&opts.DryRun, "dry-run", false, `Dry run will not start a server`)
 
 	mainCommand.AddCommand(
 		newVersionCommand(opts),
 		newServeCommand(opts),
 		newValidateCommand(opts),
+		newInitializeCommand(opts),
 	)
 
 	return mainCommand
@@ -117,6 +126,7 @@ func newServeCommand(options *Options) *cobra.Command {
 			if options.SpecificationURL != "" {
 				configuration.SpecificationURL = options.SpecificationURL
 			}
+			configuration.DatabasePath = options.DatabasePath
 
 			factory := di.NewFactory(configuration)
 			server, err := factory.CreateHTTPServer()
@@ -131,6 +141,36 @@ func newServeCommand(options *Options) *cobra.Command {
 				}
 			}
 
+			return nil
+		},
+	}
+}
+
+func newInitializeCommand(options *Options) *cobra.Command {
+	return &cobra.Command{
+		Use:   "initialize",
+		Short: "Initialize database",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			configuration, err := config.Load(options.ConfigFilename)
+			if err != nil {
+				return err
+			}
+			if options.SpecificationURL != "" {
+				configuration.SpecificationURL = options.SpecificationURL
+			}
+			if options.DatabasePath != "" {
+				configuration.DatabasePath = options.DatabasePath
+			}
+
+			factory := di.NewFactory(configuration)
+			err = factory.InitializeDatabase()
+			if err != nil {
+				return fmt.Errorf(
+					"Initialization of database '%s' failed: %w",
+					configuration.DatabasePath,
+					err,
+				)
+			}
 			return nil
 		},
 	}

@@ -1,11 +1,11 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/exgphe/kin-openapi/routers"
 	"github.com/exgphe/kin-openapi/routers/legacy"
-	"github.com/exgphe/kin-openapi/routers/legacy/pathpattern"
 	"github.com/muonsoft/openapi-mock/database"
 	"github.com/muonsoft/openapi-mock/internal/openapi"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
@@ -18,7 +18,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 )
 
@@ -26,17 +25,20 @@ type responseGeneratorHandler struct {
 	router            *legacy.Router
 	responseGenerator generator.ResponseGenerator
 	responder         responder.Responder
+	databasePath      string
 }
 
 func NewResponseGeneratorHandler(
 	router *legacy.Router,
 	responseGenerator generator.ResponseGenerator,
 	responder responder.Responder,
+	databasePath string,
 ) http.Handler {
 	generatorHandler := &responseGeneratorHandler{
 		router:            router,
 		responseGenerator: responseGenerator,
 		responder:         responder,
+		databasePath:      databasePath,
 	}
 
 	return &optionsHandler{
@@ -50,7 +52,6 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	logger := logcontext.LoggerFromContext(ctx)
 
 	route, rawPathParameters, aErr := (*handler.router).FindRoute(request)
-	templateFileName := "requests.json"
 	pathParameters := map[string]string{}
 	for key, value := range rawPathParameters {
 		unescape, err := url.PathUnescape(value)
@@ -60,43 +61,6 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 		pathParameters[key] = unescape
 	}
-	_, err := os.Stat(templateFileName)
-	initialized := !os.IsNotExist(err)
-	if !initialized {
-		templateDb := database.NewDatabase()
-
-		node := handler.router.Node()
-		var targetSuffix pathpattern.Suffix
-		for _, suffix := range node.Suffixes {
-			if suffix.Pattern == "GET " {
-				targetSuffix = suffix
-				break
-			}
-		}
-		dataRoots := targetSuffix.Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes[0].Node.Suffixes // GET /restconf/data/*
-		for _, root := range dataRoots {
-			rootRoute := root.Node.Value.(*routers.Route)
-			response, err := handler.responseGenerator.GenerateResponse(request, rootRoute)
-			if err != nil {
-				logger.Errorf("Create template error", err)
-				continue
-			}
-			responseData, _ := json.Marshal(response.Data)
-			responseNode, _ := ajson.Unmarshal(responseData)
-			key := responseNode.Keys()[0]
-			object, _ := responseNode.GetKey(key)
-			err = templateDb.Content.AppendObject(key, object)
-			if err != nil {
-				logger.Errorf("Whatever error", err)
-			}
-		}
-		err := templateDb.Save(templateFileName)
-		if err != nil {
-			logger.Errorf("Save Template DB Error", err)
-		}
-		handler.notFound(writer, request)
-		return
-	}
 	if route == nil || aErr != nil {
 		handler.notFound(writer, request)
 
@@ -104,8 +68,13 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		return
 	}
 	var bodyData []byte
+	var err error
 	if request.Body != http.NoBody && request.Body != nil {
 		bodyData, err = ioutil.ReadAll(request.Body)
+		if err != nil {
+			handler.badRequest(writer, request, errors.WithMessage(err, "Cannot read body"))
+			return
+		}
 		defer request.Body.Close()
 	}
 
@@ -167,7 +136,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		return
 	}
 
-	filename := "requests.json"
+	filename := handler.databasePath
 	db, err := database.Load(filename)
 	if err != nil {
 		logger.Errorf("Json read error", err)
@@ -235,6 +204,28 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 					if underlyingNode == nil {
 						logger.Errorf("body is empty", err)
 					} else {
+						value := route.Operation.RequestBody.Value.Content["application/yang-data+json"].Schema.Value
+						var topProperty *openapi3.SchemaRef
+						topProperty, ok := value.Properties[topKey]
+						if !ok {
+							for _, ref := range value.OneOf {
+								topProperty, ok = ref.Value.Properties[topKey]
+								if ok {
+									break
+								}
+							}
+						}
+						rawXKey, ok := topProperty.Value.Extensions["x-key"]
+						var xKey string
+						var listKeys []string
+						if ok {
+							err := json.Unmarshal(rawXKey.(json.RawMessage), &xKey)
+							if err != nil {
+								handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+								return
+							}
+							listKeys = strings.Split(xKey, ",")
+						}
 						switch request.Method {
 						case "POST":
 							tokens := strings.Split(topKey, ":")
@@ -244,27 +235,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 							} else {
 								subKey = topKey
 							}
-							value := route.Operation.RequestBody.Value.Content["application/yang-data+json"].Schema.Value
-							var topProperty *openapi3.SchemaRef
-							topProperty, ok := value.Properties[topKey]
-							if !ok {
-								for _, ref := range value.OneOf {
-									topProperty, ok = ref.Value.Properties[topKey]
-									if ok {
-										break
-									}
-								}
-							}
-							rawXKey, ok := topProperty.Value.Extensions["x-key"]
-							var xKey string
-							if ok {
-								err := json.Unmarshal(rawXKey.(json.RawMessage), &xKey)
-								if err != nil {
-									handler.responder.WriteError(ctx, writer, request.URL.Path, err)
-									return
-								}
-							}
-							appendKey, err := db.Post(keyPath, underlyingNode, subKey, xKey)
+							appendKey, err := db.Post(keyPath, underlyingNode, subKey, listKeys)
 							if err != nil {
 								switch err.(type) {
 								case *database.DataExistsError:
@@ -281,7 +252,10 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 							response.StatusCode = http.StatusCreated
 							break
 						case "PUT":
-							// TODO check id does not change
+							// check id does not change
+							if handler.checkListKeyLeafValuesChanged(writer, request, underlyingNode, route, pathParameters, listKeys, ctx) {
+								return
+							}
 							created, err := db.Put(keyPath, underlyingNode)
 							if err != nil {
 								handler.badRequest(writer, request, err)
@@ -294,7 +268,9 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 								response.StatusCode = http.StatusNoContent
 							}
 						case "PATCH":
-							// TODO check id does not change
+							if handler.checkListKeyLeafValuesChanged(writer, request, underlyingNode, route, pathParameters, listKeys, ctx) {
+								return
+							}
 							err := db.Patch(keyPath, underlyingNode)
 							if err != nil {
 								switch err.(type) {
@@ -348,6 +324,31 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 	}
 	handler.responder.WriteResponse(ctx, writer, request.URL.Path, response)
+}
+
+func (handler *responseGeneratorHandler) checkListKeyLeafValuesChanged(writer http.ResponseWriter, request *http.Request, underlyingNode *ajson.Node, route *routers.Route, pathParameters map[string]string, listKeys []string, ctx context.Context) bool {
+	//if underlyingNode.IsArray() {
+	//	underlyingNodeElements, _ := underlyingNode.GetArray()
+	//	underlyingNodeElement := underlyingNodeElements[0]
+	//	var pathParameterOrder []string
+	//	for _, parameter := range route.Operation.Parameters {
+	//		if parameter.Value.In == "path" {
+	//			pathParameterOrder = append(pathParameterOrder, pathParameters[parameter.Value.Name])
+	//		}
+	//	}
+	//	//pathParameterOrderLen := len(pathParameterOrder)
+	//	//for i, listKey := range listKeys {
+	//	//	value, err := underlyingNodeElement.GetKey(listKey)
+	//	//	if err != nil {
+	//	//		handler.responder.WriteError(ctx, writer, request.URL.Path, errors.WithMessage(err, "Error When Trying To Read List Key: "+listKey))
+	//	//	}
+	//		//if pathParameterOrder[pathParameterOrderLen-i-1] != value.String() {
+	//		//	handler.badRequest(writer, request, errors.New("The "+strings.ToUpper(route.Method)+" method MUST NOT be used to change the key leaf values for a data resource instance"))
+	//		//	return true
+	//		//}
+	//	//}
+	//}
+	return false
 }
 
 func (handler *responseGeneratorHandler) writeError(writer http.ResponseWriter, statusCode int, restconfErrors openapi.RestconfErrors) {
