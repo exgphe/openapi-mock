@@ -10,7 +10,7 @@ type contextKey int
 
 const (
 	recursionKey      contextKey = 0
-	maxRecursionLevel int        = 20
+	maxRecursionLevel int        = 100
 )
 
 type recursionBreaker struct {
