@@ -39,7 +39,7 @@ func (generator *stringGenerator) GenerateDataBySchema(ctx context.Context, sche
 	}
 	if len(schema.Enum) > 0 {
 		value = generator.getRandomEnumValue(schema.Enum)
-	} else if schema.Pattern != "" {
+	} else if schema.Pattern != "" && schema.Format != "byte" {
 		_, ok := schema.Extensions["x-range"]
 		if ok {
 			value, err = generator.generateNumberString(schema)
@@ -72,8 +72,8 @@ func (generator *stringGenerator) generateValueByPattern(pattern string, maxLeng
 			Previous:    err,
 		})
 	}
-	if maxLength > 39 {
-		maxLength = 39
+	if maxLength > defaultPatternStringMaxLength {
+		maxLength = defaultPatternStringMaxLength
 	}
 	value := g.Generate(maxLength)
 	return fmt.Sprintf("%s", value), nil

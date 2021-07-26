@@ -3,7 +3,6 @@ package reggen
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
 	"regexp/syntax"
@@ -158,7 +157,9 @@ func (g *Generator) generate(s *state, re *syntax.Regexp) string {
 		}
 		res := ""
 		count := 0
-		re.Max = int(math.Min(float64(re.Max), float64(s.limit)))
+		if s.limit < re.Max {
+			re.Max = s.limit
+		}
 		if re.Max > re.Min {
 			count = g.rand.Intn(re.Max - re.Min + 1)
 		}

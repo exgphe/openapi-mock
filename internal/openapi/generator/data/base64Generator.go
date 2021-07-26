@@ -21,6 +21,12 @@ func (generator *base64Generator) GenerateBase64Text(minLength int, maxLength in
 	}
 	rawMinLength := minLength*3/4 - 1
 	rawMaxLength := maxLength*3/4 - 1
+	if rawMinLength < 0 {
+		rawMinLength = 0
+	}
+	if rawMaxLength < 0 {
+		rawMaxLength = 0
+	}
 
 	text := generator.generator.generateRangedText(rawMinLength, rawMaxLength)
 	encoded := &bytes.Buffer{}
