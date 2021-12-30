@@ -33,7 +33,7 @@ func newStringGenerator(random randomGenerator) schemaGenerator {
 func (generator *stringGenerator) GenerateDataBySchema(ctx context.Context, schema *openapi3.Schema) (Data, error) {
 	var value Data
 	var err error
-	maxLength := 0
+	maxLength := defaultMaxLength
 	if schema.MaxLength != nil {
 		maxLength = int(*schema.MaxLength)
 	}

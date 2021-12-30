@@ -66,13 +66,18 @@ func (merger *combinedSchemaMerger) mergeAnySchemasRandomly(schemas []*openapi3.
 func (merger *combinedSchemaMerger) generateRandomlyNeedsToBeMerged(schemas []*openapi3.SchemaRef) []bool {
 	needsToBeMerged := make([]bool, len(schemas))
 	// guarantees that at least 1 schema will be merged
+	if len(schemas) > 1 && *schemas[0].Value.AdditionalPropertiesAllowed {
+		needsToBeMerged[1+merger.random.Intn(len(schemas)-1)] = true
+		return needsToBeMerged
+	}
+
 	needsToBeMerged[merger.random.Intn(len(schemas))] = true
 
-	for i := 0; i < len(schemas); i++ {
-		if merger.random.Float64() >= 0.5 {
-			needsToBeMerged[i] = true
-		}
-	}
+	//for i := 0; i < len(schemas); i++ {
+	//	if merger.random.Float64() >= 0.5 {
+	//		needsToBeMerged[i] = true
+	//	}
+	//}
 
 	return needsToBeMerged
 }
@@ -116,6 +121,14 @@ func (merger *combinedSchemaMerger) mergeAllNonEmptyAttributes(mergedSchema *ope
 	mergedSchema.MaxItems = merger.replaceNonNilUint64(mergedSchema.MaxItems, mergingSchema.MaxItems)
 	mergedSchema.MinProps = merger.replaceNonZeroUint64(mergedSchema.MinProps, mergingSchema.MinProps)
 	mergedSchema.MaxProps = merger.replaceNonNilUint64(mergedSchema.MaxProps, mergingSchema.MaxProps)
+	if mergingSchema.Extensions != nil {
+		if mergedSchema.Extensions == nil {
+			mergedSchema.Extensions = make(map[string]interface{})
+		}
+		for key, value := range mergingSchema.Extensions {
+			mergedSchema.Extensions[key] = value
+		}
+	}
 }
 
 func (merger *combinedSchemaMerger) mergeProperties(mergedSchema *openapi3.Schema, mergingSchema *openapi3.Schema) {
