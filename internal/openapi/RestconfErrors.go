@@ -9,8 +9,8 @@ type RestconfErrors struct {
 type RestconfError struct {
 	ErrorType    string      `json:"error-type"`
 	ErrorTag     string      `json:"error-tag"`
-	ErrorPath    string      `json:"error-path"`
-	ErrorMessage string      `json:"error-message"`
+	ErrorPath    string      `json:"error-path,omitempty"`
+	ErrorMessage string      `json:"error-message,omitempty"`
 	ErrorAppTag  string      `json:"error-app-tag,omitempty"`
 	ErrorInfo    interface{} `json:"error-info,omitempty"`
 }

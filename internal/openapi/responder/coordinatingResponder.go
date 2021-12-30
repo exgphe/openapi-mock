@@ -25,10 +25,15 @@ type formatGuess struct {
 func (responder *coordinatingResponder) WriteResponse(ctx context.Context, writer http.ResponseWriter, path string, response *generator.Response) {
 	format := responder.guessSerializationFormat(response.ContentType)
 
-	data, err := responder.serializer.Serialize(response.Data, format)
-	if err != nil {
-		responder.WriteError(ctx, writer, path, err)
-		return
+	var data []byte
+	var err error
+
+	if response.StatusCode != http.StatusNoContent {
+		data, err = responder.serializer.Serialize(response.Data, format)
+		if err != nil {
+			responder.WriteError(ctx, writer, path, err)
+			return
+		}
 	}
 
 	if response.ContentType != "" {
@@ -38,7 +43,9 @@ func (responder *coordinatingResponder) WriteResponse(ctx context.Context, write
 	writer.WriteHeader(response.StatusCode)
 	writer.Header().Add("Server", "mock-server")
 	writer.Header().Add("Cache-Control", "no-cache")
-	_, _ = writer.Write(data)
+	if response.StatusCode != http.StatusNoContent {
+		_, _ = writer.Write(data)
+	}
 }
 
 func (responder *coordinatingResponder) WriteError(ctx context.Context, writer http.ResponseWriter, path string, err error) {

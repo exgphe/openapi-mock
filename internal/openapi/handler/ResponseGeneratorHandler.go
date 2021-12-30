@@ -10,6 +10,7 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/openapi"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	"github.com/muonsoft/openapi-mock/internal/openapi/responder"
+	sc "github.com/muonsoft/openapi-mock/internal/openapi/subscriptionCenter"
 	"github.com/muonsoft/openapi-mock/openapi-validator"
 	"github.com/muonsoft/openapi-mock/pkg/logcontext"
 	"github.com/pkg/errors"
@@ -21,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+var subscriptionCenter = sc.NewSubscriptionCenter()
 
 type responseGeneratorHandler struct {
 	router            *legacy.Router
@@ -161,7 +164,47 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		return
 	}
 
-	if !strings.Contains(request.URL.Path, "restconf/operations/") && request.Method != "DELETE" {
+	if strings.Contains(request.URL.Path, "restconf/operations/") {
+		switch request.URL.Path {
+		case "/restconf/operations/ietf-subscribed-notifications:establish-subscription":
+			var requestInput openapi.EstablishSubscriptionInput
+			err := json.Unmarshal(bodyData, &requestInput)
+			if err == nil {
+				if requestInput.Input.Encoding != "" && requestInput.Input.Encoding != "ietf-subscribed-notifications:encode-json" {
+					handler.badRequestRestconf(writer, request, openapi.EncodingUnsupportedError())
+					return
+				}
+				id := subscriptionCenter.Subscribe(requestInput.Input.Subscription.Subscription)
+				output := openapi.EstablishSubscriptionOutput{
+					ID: id,
+				}
+				response.Data = output.Wrap()
+			} else {
+				handler.badRequest(writer, request, errors.WithMessage(err, "Cannot extract body"))
+				logger.Errorf("Cannot extract body", err)
+				return
+			}
+		case "/restconf/operations/ietf-subscribed-notifications:delete-subscription":
+			var requestInput openapi.DeleteSubscriptionInput
+			err := json.Unmarshal(bodyData, &requestInput)
+			if err == nil {
+				id := requestInput.Input.ID
+				success := subscriptionCenter.Delete(id)
+				if !success {
+					handler.badRequestRestconf(writer, request, openapi.NoSuchSubscriptionError())
+					return
+				}
+				response.StatusCode = http.StatusNoContent
+				response.Data = nil
+			} else {
+				handler.badRequest(writer, request, errors.WithMessage(err, "Cannot extract body"))
+				logger.Errorf("Cannot extract body", err)
+				return
+			}
+		default:
+			break
+		}
+	} else if request.Method != "DELETE" {
 		// Try to read from database
 		if request.Method == "GET" || request.Method == "HEAD" {
 			entry, err := db.Get(keyPath)
@@ -313,8 +356,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		} else {
 			writer.Header().Add("ETag", eTag)
 		}
-	}
-	if request.Method == "DELETE" {
+	} else { // DELETE
 		err := db.Delete(keyPath)
 		if err != nil {
 			switch err.(type) {
@@ -395,4 +437,10 @@ func (handler *responseGeneratorHandler) badRequest(writer http.ResponseWriter, 
 			ErrorPath:    request.URL.Path,
 			ErrorMessage: err.Error(),
 		}))
+}
+
+func (handler *responseGeneratorHandler) badRequestRestconf(writer http.ResponseWriter, request *http.Request, errs ...openapi.RestconfError) {
+	handler.writeError(writer,
+		http.StatusBadRequest,
+		openapi.NewRestconfErrors(errs...))
 }
