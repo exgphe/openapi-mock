@@ -23,7 +23,7 @@ func New(port uint16, handler http.Handler, logger *log.Logger) Server {
 			Handler:        handler,
 			ErrorLog:       logger,
 			ReadTimeout:    5 * time.Second,
-			WriteTimeout:   10 * time.Second,
+			WriteTimeout:   0, // Supports SSE
 			IdleTimeout:    30 * time.Second,
 			MaxHeaderBytes: 1 << 20,
 		},

@@ -15,6 +15,7 @@ import (
 	"github.com/muonsoft/openapi-mock/pkg/logcontext"
 	"github.com/pkg/errors"
 	"github.com/spyzhov/ajson"
+	"github.com/yudai/gojsondiff"
 	"google.golang.org/grpc"
 	"io/ioutil"
 	"net/http"
@@ -54,9 +55,67 @@ func NewResponseGeneratorHandler(
 	}
 }
 
+const previousDatabaseFilename = ".temp/database_previous.json"
+const afterDatabaseFilename = ".temp/database_after.json"
+
 func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	ctx := request.Context()
 	logger := logcontext.LoggerFromContext(ctx)
+	if strings.HasPrefix(request.URL.Path, "/internal/trigger") {
+		previousDatabase, err := ioutil.ReadFile(previousDatabaseFilename)
+		if err != nil {
+			logger.Errorf("Failed to open file %s", previousDatabaseFilename, err)
+			handler.notFound(writer, request)
+			return
+		}
+
+		// Another JSON string
+		afterDatabase, err := ioutil.ReadFile(afterDatabaseFilename)
+		if err != nil {
+			logger.Errorf("Failed to open file %s", afterDatabaseFilename, err)
+			handler.notFound(writer, request)
+			return
+		}
+		differ := gojsondiff.New()
+		result, err := differ.Compare(previousDatabase, afterDatabase)
+		if err != nil {
+			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			return
+		}
+		if result.Modified() {
+			//	// TODO detailed diffs
+			networkID := "" // TODO
+			err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationUpdate, nil, networkID)
+			if err != nil {
+				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+				return
+			}
+		}
+		handler.responder.WriteResponse(ctx, writer, request.URL.Path, &generator.Response{
+			StatusCode:  http.StatusNoContent,
+			ContentType: "",
+			Data:        nil,
+		})
+		return
+	} else if strings.HasPrefix(request.URL.Path, "/restconf/streams/yang-push-json/subscription-id=") {
+		id, err := strconv.Atoi(request.URL.Path[49:])
+		if err != nil {
+			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			return
+		}
+		subscriptions := subscriptionCenter.Get(uint32(id))
+		if subscriptions != nil {
+			err = subscriptionCenter.Connect(uint32(id), writer, request)
+			if err != nil {
+				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+				return
+			}
+		} else {
+			handler.notFound(writer, request)
+			return
+		}
+		return
+	}
 
 	route, rawPathParameters, aErr := (*handler.router).FindRoute(request)
 	pathParameters := map[string]string{}

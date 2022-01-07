@@ -56,7 +56,12 @@ func (handler *optionsHandler) getAllowedMethods(request *http.Request) []string
 	originalMethod := request.Method
 	for _, method := range possibleMethods {
 		request.Method = method
-		_, _, err := (*handler.router).FindRoute(request)
+		var err error
+		if (strings.HasPrefix(request.URL.Path, "/internal/trigger") || strings.HasPrefix(request.URL.Path, "/restconf/streams/yang-push-json/subscription-id=")) && method == "GET" {
+			err = nil
+		} else {
+			_, _, err = (*handler.router).FindRoute(request)
+		}
 		if err == nil {
 			allowedMethods = append(allowedMethods, method)
 		}

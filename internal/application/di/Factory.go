@@ -8,14 +8,8 @@ import (
 	"github.com/exgphe/kin-openapi/routers"
 	"github.com/exgphe/kin-openapi/routers/legacy"
 	"github.com/exgphe/kin-openapi/routers/legacy/pathpattern"
-	"github.com/muonsoft/openapi-mock/database"
-	"github.com/spyzhov/ajson"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-
 	"github.com/gorilla/handlers"
+	"github.com/muonsoft/openapi-mock/database"
 	"github.com/muonsoft/openapi-mock/internal/application/config"
 	responseGenerator "github.com/muonsoft/openapi-mock/internal/openapi/generator"
 	"github.com/muonsoft/openapi-mock/internal/openapi/generator/data"
@@ -25,7 +19,12 @@ import (
 	"github.com/muonsoft/openapi-mock/internal/server"
 	"github.com/muonsoft/openapi-mock/internal/server/middleware"
 	"github.com/sirupsen/logrus"
+	"github.com/spyzhov/ajson"
 	"github.com/unrolled/secure"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
 )
 
 type Factory struct {
@@ -91,7 +90,7 @@ func (factory *Factory) CreateHTTPHandler(router *legacy.Router) http.Handler {
 		handlers.RecoveryLogger(factory.logger),
 		handlers.PrintRecoveryStack(true),
 	)(httpHandler)
-	httpHandler = http.TimeoutHandler(httpHandler, factory.configuration.ResponseTimeout, "")
+	//httpHandler = http.TimeoutHandler(httpHandler, factory.configuration.ResponseTimeout, "")
 
 	return httpHandler
 }
