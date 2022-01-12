@@ -90,13 +90,13 @@ type PushChangeUpdate struct {
 }
 
 type YangPatch struct {
-	YangPatch YangPatchBody `json:"yang-patch"`
+	YangPatch YangPatchBody `json:"ietf-yang-patch:yang-patch"`
 }
 
 type YangPatchBody struct {
-	PatchID string          `json:"patch-id"`
-	Comment string          `json:"comment"`
-	Edit    []YangPatchEdit `json:"edit"`
+	PatchID string `json:"patch-id"`
+	//Comment string          `json:"comment"`
+	Edit []YangPatchEdit `json:"edit"`
 }
 
 type YangPatchEdit struct {
@@ -110,7 +110,7 @@ func NewRestconfNotification(id uint32, operation string, target string, value i
 	currentTime := time.Now()
 	return RestconfNotification{
 		Notification: RestconfNotificationBody{
-			EventTime: currentTime.Format("2006-01-02T15:04:05Z"),
+			EventTime: currentTime.UTC().Format("2006-01-02T15:04:05.000Z"),
 			PushChangeUpdate: PushChangeUpdate{
 				SubscriptionID: id,
 				DatastoreChanges: YangPatch{

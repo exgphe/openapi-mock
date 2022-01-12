@@ -10,23 +10,49 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	net "github.com/subchord/go-sse"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
 type SubscriptionCenter struct {
 	subscriptions map[uint32][]string // subscription id -> objectType[]
-	broker        *net.Broker
+	brokerMap     map[uint32]*net.Broker
 	connMap       map[uint32]map[string]*net.ClientConnection // subscription id -> connection id -> connection
 }
 
-func NewSubscriptionCenter() *SubscriptionCenter {
+const path = "subscriptions.json"
+
+func newBroker() *net.Broker {
 	broker := net.NewBroker(map[string]string{"Access-Control-Allow-Origin": "*"})
 	broker.SetDisconnectCallback(func(clientId string, sessionId string) {
 		log.Printf("session %v of client %v was disconnected.", sessionId, clientId)
 	})
-	return &SubscriptionCenter{subscriptions: make(map[uint32][]string), broker: broker, connMap: make(map[uint32]map[string]*net.ClientConnection)}
+	return broker
+}
+
+func NewSubscriptionCenter() *SubscriptionCenter {
+	sc := &SubscriptionCenter{subscriptions: make(map[uint32][]string), brokerMap: make(map[uint32]*net.Broker), connMap: make(map[uint32]map[string]*net.ClientConnection)}
+	_, err := os.Stat(path)
+	if !os.IsNotExist(err) {
+		// file exists
+		var fileContent []byte
+		fileContent, _ = ioutil.ReadFile(path)
+		_ = json.Unmarshal(fileContent, &sc.subscriptions)
+	}
+	return sc
+}
+
+func (subscriptionCenter *SubscriptionCenter) Save() (err error) {
+	data, err := json.Marshal(subscriptionCenter.subscriptions)
+	if err != nil {
+		return
+	}
+	err = ioutil.WriteFile(path, data, fs.ModePerm)
+	return
 }
 
 func (subscriptionCenter *SubscriptionCenter) Subscribe(subscriptions []openapi.Subscription) (resultId uint32) {
@@ -42,6 +68,8 @@ func (subscriptionCenter *SubscriptionCenter) Subscribe(subscriptions []openapi.
 	for _, objectTypeInfo := range objectTypeInfoSet.Elements() {
 		subscriptionCenter.subscriptions[resultId] = append(subscriptionCenter.subscriptions[resultId], objectTypeInfo.(string))
 	}
+	_ = subscriptionCenter.Save()
+	subscriptionCenter.brokerMap[resultId] = newBroker()
 	return
 }
 
@@ -54,12 +82,29 @@ func (subscriptionCenter *SubscriptionCenter) Delete(id uint32) bool {
 		return false
 	}
 	delete(subscriptionCenter.subscriptions, id)
+	if subscriptionCenter.connMap[id] != nil {
+		delete(subscriptionCenter.connMap, id)
+	}
+	if subscriptionCenter.brokerMap[id] != nil {
+		err := subscriptionCenter.brokerMap[id].Close()
+		if err != nil {
+			println(err)
+		}
+	}
+	delete(subscriptionCenter.brokerMap, id)
+	err := subscriptionCenter.Save()
+	if err != nil {
+		println(err)
+	}
 	return true
 }
 
 func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, w http.ResponseWriter, r *http.Request) (err error) {
 	clientId := uuid.New().String()
-	conn, err := subscriptionCenter.broker.ConnectWithHeartBeatInterval(clientId, w, r, 1*time.Second)
+	if subscriptionCenter.brokerMap[id] == nil {
+		subscriptionCenter.brokerMap[id] = newBroker()
+	}
+	conn, err := subscriptionCenter.brokerMap[id].ConnectWithHeartBeatInterval(clientId, w, r, 1*time.Second)
 	if err != nil {
 		return
 	}

@@ -62,7 +62,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	ctx := request.Context()
 	logger := logcontext.LoggerFromContext(ctx)
 	if strings.HasPrefix(request.URL.Path, "/internal/trigger") {
-		previousDatabase, err := ioutil.ReadFile(previousDatabaseFilename)
+		previousDatabaseData, err := ioutil.ReadFile(previousDatabaseFilename)
 		if err != nil {
 			logger.Errorf("Failed to open file %s", previousDatabaseFilename, err)
 			handler.notFound(writer, request)
@@ -70,26 +70,124 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 
 		// Another JSON string
-		afterDatabase, err := ioutil.ReadFile(afterDatabaseFilename)
+		afterDatabaseData, err := ioutil.ReadFile(afterDatabaseFilename)
 		if err != nil {
 			logger.Errorf("Failed to open file %s", afterDatabaseFilename, err)
 			handler.notFound(writer, request)
 			return
 		}
 		differ := gojsondiff.New()
-		result, err := differ.Compare(previousDatabase, afterDatabase)
+		result, err := differ.Compare(previousDatabaseData, afterDatabaseData)
 		if err != nil {
 			handler.responder.WriteError(ctx, writer, request.URL.Path, err)
 			return
 		}
 		if result.Modified() {
+			logger.Infoln("检测到改动")
 			//	// TODO detailed diffs
-			networkID := "" // TODO
-			err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationUpdate, nil, networkID)
+			previousDatabase, err := ajson.Unmarshal(previousDatabaseData)
 			if err != nil {
 				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
 				return
 			}
+			afterDatabase, err := ajson.Unmarshal(afterDatabaseData)
+			if err != nil {
+				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+				return
+			}
+			previousNetworksNode, err := previousDatabase.JSONPath("$['ietf-network:networks'].network")
+			if err != nil {
+				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+				return
+			}
+			previousNetworks, _ := previousNetworksNode[0].GetArray()
+			for _, previousNetwork := range previousNetworks {
+				networkID, _ := previousNetwork.GetKey("network-id")
+				networkIDString, _ := networkID.GetString()
+				afterNetworkCandidates, _ := afterDatabase.JSONPath("$['ietf-network:networks'].network[?(@['network-id']=='" + networkIDString + "')]")
+				if len(afterNetworkCandidates) > 0 {
+					afterNetwork := afterNetworkCandidates[0]
+					// Compare Nodes
+					previousNodesNode, _ := previousNetwork.GetKey("node")
+					previousNodes, _ := previousNodesNode.GetArray()
+					previousNodesIds := make(map[string]bool)
+					for _, previousNode := range previousNodes {
+						nodeID, _ := previousNode.GetKey("node-id")
+						nodeIDString, _ := nodeID.GetString()
+						previousNodesIds[nodeIDString] = true
+						afterNodeArray, _ := afterNetwork.JSONPath("@.node[?(@['node-id']=='" + nodeIDString + "')]")
+						if len(afterNodeArray) > 0 {
+							afterNode := afterNodeArray[0]
+							// TODO compare tp
+
+							//previousTpsNode, _ := previousNode.GetKey("ietf-network-topology:termination-point")
+							//previousTps, _ := previousTpsNode.GetArray()
+							//for _, previousTp := range previousTps {
+							//	tpID, _ := previousTp.GetKey("tp-id")
+							//}
+							//afterTpsNode, _ := afterNode.GetKey("ietf-network-topology:termination-point")
+							//afterTps, _ := afterTpsNode.GetArray()
+							//if len(afterTps) > 0 {
+							//
+							//}
+							// TODO compare ttp
+							previousTe, _ := previousNode.GetKey("ietf-te-topology:te")
+							previousTtpsNode, _ := previousTe.GetKey("tunnel-termination-point")
+							afterTe, _ := afterNode.GetKey("ietf-te-topology:te")
+							afterTtpsNode, _ := afterTe.GetKey("tunnel-termination-point")
+
+							// check updated
+							_ = previousNode.DeleteKey("ietf-network-topology:termination-point")
+							_ = afterNode.DeleteKey("ietf-network-topology:termination-point")
+							_ = previousTtpsNode.Delete()
+							_ = afterTtpsNode.Delete()
+
+							eq, _ := previousNode.Eq(afterNode)
+							if err != nil {
+								logger.Errorf("node compare error", err)
+							} else {
+								if !eq {
+									value, _ := afterNode.Unpack()
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationUpdate, value, networkIDString, nodeIDString)
+									if err != nil {
+										logger.Errorf("node update notification error", err)
+										break
+									}
+								}
+							}
+						} else {
+							err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationDelete, nil, networkIDString, nodeIDString)
+							if err != nil {
+								logger.Errorf("node delete notification error", err)
+								break
+							}
+						}
+					}
+					// check added
+					afterNodesNode, _ := afterNetwork.GetKey("node")
+					afterNodes, _ := afterNodesNode.GetArray()
+					for _, afterNode := range afterNodes {
+						nodeID, _ := afterNode.GetKey("node-id")
+						nodeIDString, _ := nodeID.GetString()
+						if !previousNodesIds[nodeIDString] {
+							value, _ := afterNode.Unpack()
+							err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationCreate, value, networkIDString, nodeIDString)
+							if err != nil {
+								logger.Errorf("node added notification error", err)
+								break
+							}
+						}
+					}
+					// TODO Compare Links
+				}
+			}
+			//err = subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationUpdate, nil, networkID)
+			//if err != nil {
+			//	handler.responder.WriteError(ctx, writer, request.URL.Path, err)
+			//	return
+			//}
+		} else {
+			logger.Infoln("未检测到改动")
 		}
 		handler.responder.WriteResponse(ctx, writer, request.URL.Path, &generator.Response{
 			StatusCode:  http.StatusNoContent,
