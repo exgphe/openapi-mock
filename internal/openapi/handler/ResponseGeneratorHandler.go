@@ -32,6 +32,7 @@ type responseGeneratorHandler struct {
 	responder         responder.Responder
 	databasePath      string
 	grpcPort          uint16
+	sseInterval       uint64
 }
 
 func NewResponseGeneratorHandler(
@@ -40,6 +41,7 @@ func NewResponseGeneratorHandler(
 	responder responder.Responder,
 	databasePath string,
 	grpcPort uint16,
+	sseInterval uint64,
 ) http.Handler {
 	generatorHandler := &responseGeneratorHandler{
 		router:            router,
@@ -47,6 +49,7 @@ func NewResponseGeneratorHandler(
 		responder:         responder,
 		databasePath:      databasePath,
 		grpcPort:          grpcPort,
+		sseInterval:       sseInterval,
 	}
 
 	return &optionsHandler{
@@ -203,7 +206,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 		}
 		subscriptions := subscriptionCenter.Get(uint32(id))
 		if subscriptions != nil {
-			err = subscriptionCenter.Connect(uint32(id), writer, request)
+			err = subscriptionCenter.Connect(uint32(id), handler.sseInterval, writer, request)
 			if err != nil {
 				handler.responder.WriteError(ctx, writer, request.URL.Path, err)
 				return

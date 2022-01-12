@@ -21,7 +21,8 @@ type environmentConfiguration struct {
 	SuppressErrors  *bool    `split_words:"true"`
 	UseExamples     *string  `split_words:"true"`
 
-	GrpcPort *uint16 `split_words:"true"`
+	GrpcPort    *uint16 `split_words:"true"`
+	SSEInterval *uint64 `split_words:"true"`
 }
 
 func updateConfigFromEnvironment(fileConfig *fileConfiguration) {
@@ -49,6 +50,7 @@ func updateConfigFromEnvironment(fileConfig *fileConfiguration) {
 	fileConfig.Generation.SuppressErrors = coalesceBool(fileConfig.Generation.SuppressErrors, envConfig.SuppressErrors)
 	fileConfig.Generation.UseExamples = coalesceString(fileConfig.Generation.UseExamples, envConfig.UseExamples)
 	fileConfig.GrpcPort = coalesceUint16(fileConfig.GrpcPort, envConfig.GrpcPort)
+	fileConfig.SSEInterval = coalesceUint64(fileConfig.SSEInterval, envConfig.SSEInterval)
 }
 
 func coalesceString(v1 string, v2 *string) string {
@@ -68,6 +70,14 @@ func coalesceBool(v1 bool, v2 *bool) bool {
 }
 
 func coalesceUint16(v1 *uint16, v2 *uint16) *uint16 {
+	if v2 != nil {
+		return v2
+	}
+
+	return v1
+}
+
+func coalesceUint64(v1 *uint64, v2 *uint64) *uint64 {
 	if v2 != nil {
 		return v2
 	}

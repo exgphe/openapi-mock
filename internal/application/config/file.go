@@ -15,6 +15,7 @@ type fileConfiguration struct {
 	Application applicationConfiguration `json:"application" yaml:"application"`
 	Generation  generationConfiguration  `json:"generation" yaml:"generation"`
 	GrpcPort    *uint16                  `json:"grpc_port" yaml:"grpc_port"`
+	SSEInterval *uint64                  `json:"sse_interval" yaml:"sse_interval"`
 }
 
 type openapiConfiguration struct {

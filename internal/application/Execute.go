@@ -25,6 +25,7 @@ type Options struct {
 	overrideArguments bool
 	DatabasePath      string
 	GrpcPort          uint16
+	SSEInterval       uint64
 }
 
 type OptionFunc func(options *Options)

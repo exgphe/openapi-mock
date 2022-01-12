@@ -33,6 +33,7 @@ type Configuration struct {
 	SuppressErrors  bool
 	DatabasePath    string
 	GrpcPort        uint16
+	SSEInterval     uint64
 }
 
 const (
@@ -44,6 +45,7 @@ const (
 	DefaultMaxInt          = int64(math.MaxInt32)
 	DefaultMinFloat        = -float64(math.MaxInt32 / 2)
 	DefaultMaxFloat        = float64(math.MaxInt32 / 2)
+	DefaultSSEInterval     = uint64(15)
 )
 
 func (config *Configuration) Dump() map[string]interface{} {

@@ -8,6 +8,14 @@ func defaultOnNilUint16(v *uint16, defaultValue uint16) uint16 {
 	return *v
 }
 
+func defaultOnNilUint64(v *uint64, defaultValue uint64) uint64 {
+	if v == nil {
+		return defaultValue
+	}
+
+	return *v
+}
+
 func defaultOnNilInt64(v *int64, defaultValue int64) int64 {
 	if v == nil {
 		return defaultValue

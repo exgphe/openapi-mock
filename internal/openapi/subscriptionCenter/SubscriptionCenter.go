@@ -99,12 +99,12 @@ func (subscriptionCenter *SubscriptionCenter) Delete(id uint32) bool {
 	return true
 }
 
-func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, w http.ResponseWriter, r *http.Request) (err error) {
+func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, interval uint64, w http.ResponseWriter, r *http.Request) (err error) {
 	clientId := uuid.New().String()
 	if subscriptionCenter.brokerMap[id] == nil {
 		subscriptionCenter.brokerMap[id] = newBroker()
 	}
-	conn, err := subscriptionCenter.brokerMap[id].ConnectWithHeartBeatInterval(clientId, w, r, 1*time.Second)
+	conn, err := subscriptionCenter.brokerMap[id].ConnectWithHeartBeatInterval(clientId, w, r, time.Duration(interval)*time.Second)
 	if err != nil {
 		return
 	}

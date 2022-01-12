@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/clbanning/mxj v1.8.4
-	github.com/exgphe/go-sse v1.0.8
+	github.com/exgphe/go-sse v1.0.9
 	github.com/exgphe/kin-openapi v0.62.1-0.20210602104001-3e09d11632a4
 	github.com/go-ozzo/ozzo-routing/v2 v2.3.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0

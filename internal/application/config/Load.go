@@ -101,6 +101,7 @@ func createApplicationConfiguration(fileConfig *fileConfiguration) *Configuratio
 		DefaultMaxFloat: defaultOnNilFloat(fileConfig.Generation.DefaultMaxFloat, DefaultMaxFloat),
 		SuppressErrors:  fileConfig.Generation.SuppressErrors,
 		GrpcPort:        defaultOnNilUint16(fileConfig.GrpcPort, DefaultGrpcPort),
+		SSEInterval:     defaultOnNilUint64(fileConfig.SSEInterval, DefaultSSEInterval),
 	}
 }
 
