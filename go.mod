@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/clbanning/mxj v1.8.4
+	github.com/exgphe/go-sse v1.0.8
 	github.com/exgphe/kin-openapi v0.62.1-0.20210602104001-3e09d11632a4
 	github.com/go-ozzo/ozzo-routing/v2 v2.3.0
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
@@ -17,7 +18,6 @@ require (
 	github.com/spf13/cobra v1.1.1
 	github.com/spyzhov/ajson v0.4.2
 	github.com/stretchr/testify v1.6.1
-	github.com/subchord/go-sse v1.0.7
 	github.com/unrolled/secure v1.0.8
 	github.com/yudai/gojsondiff v1.0.0
 	google.golang.org/grpc v1.38.0
