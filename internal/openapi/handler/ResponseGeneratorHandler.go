@@ -121,19 +121,100 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 						afterNodeArray, _ := afterNetwork.JSONPath("@.node[?(@['node-id']=='" + nodeIDString + "')]")
 						if len(afterNodeArray) > 0 {
 							afterNode := afterNodeArray[0]
-							// TODO compare tp
+							// Compare tp
+							previousTpsNode, _ := previousNode.GetKey("ietf-network-topology:termination-point")
+							previousTps, _ := previousTpsNode.GetArray()
+							previousTpsIds := make(map[string]bool)
+							for _, previousTp := range previousTps {
+								tpID, _ := previousTp.GetKey("tp-id")
+								tpIDString, _ := tpID.GetString()
+								previousTpsIds[tpIDString] = true
+								afterTpArray, _ := afterNode.JSONPath("@['ietf-network-topology:termination-point'][?(@['tp-id']=='" + tpIDString + "')]")
+								if len(afterTpArray) > 0 {
+									afterTp := afterTpArray[0]
+									eq, _ := previousTp.Eq(afterTp)
+									if err != nil {
+										logger.Errorf("tp compare error", err)
+									} else {
+										if !eq {
+											value, _ := afterTp.Unpack()
+											err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTP, openapi.OperationUpdate, value, networkIDString, nodeIDString, tpIDString)
+											if err != nil {
+												logger.Errorf("tp update notification error", err)
+												break
+											}
+										}
+									}
+								} else {
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTP, openapi.OperationDelete, nil, networkIDString, nodeIDString, tpIDString)
+									if err != nil {
+										logger.Errorf("tp delete notification error", err)
+										break
+									}
+								}
+							}
 
-							//previousTpsNode, _ := previousNode.GetKey("ietf-network-topology:termination-point")
-							//previousTps, _ := previousTpsNode.GetArray()
-							//for _, previousTp := range previousTps {
-							//	tpID, _ := previousTp.GetKey("tp-id")
-							//}
-							//afterTpsNode, _ := afterNode.GetKey("ietf-network-topology:termination-point")
-							//afterTps, _ := afterTpsNode.GetArray()
-							//if len(afterTps) > 0 {
-							//
-							//}
+							afterTpsNode, _ := afterNode.GetKey("ietf-network-topology:termination-point")
+							afterTps, _ := afterTpsNode.GetArray()
+							for _, afterTp := range afterTps {
+								tpID, _ := afterTp.GetKey("tp-id")
+								tpIDString, _ := tpID.GetString()
+								if !previousTpsIds[tpIDString] {
+									value, _ := afterTp.Unpack()
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTP, openapi.OperationCreate, value, networkIDString, nodeIDString, tpIDString)
+									if err != nil {
+										logger.Errorf("tp added notification error", err)
+										break
+									}
+								}
+							}
 							// TODO compare ttp
+							previousTtps, _ := previousNode.JSONPath("@['ietf-te-topology:te']['tunnel-termination-point'][*]")
+							previousTtpsIds := make(map[string]bool)
+							for _, previousTtp := range previousTtps {
+								ttpID, _ := previousTtp.GetKey("tunnel-tp-id")
+								ttpIDString, _ := ttpID.GetString()
+								previousTtpsIds[ttpIDString] = true
+								afterTtpArray, _ := afterNode.JSONPath("@['ietf-te-topology:te']['tunnel-termination-point'][?(@['tunnel-tp-id']=='" + ttpIDString + "')]")
+								if len(afterTtpArray) > 0 {
+									afterTtp := afterTtpArray[0]
+									eq, _ := previousTtp.Eq(afterTtp)
+									if err != nil {
+										logger.Errorf("ttp compare error", err)
+									} else {
+										if !eq {
+											value, _ := afterTtp.Unpack()
+											err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTTP, openapi.OperationUpdate, value, networkIDString, nodeIDString, ttpIDString)
+											if err != nil {
+												logger.Errorf("ttp update notification error", err)
+												break
+											}
+										}
+									}
+								} else {
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTTP, openapi.OperationDelete, nil, networkIDString, nodeIDString, ttpIDString)
+									if err != nil {
+										logger.Errorf("ttp delete notification error", err)
+										break
+									}
+								}
+							}
+
+							afterTtps, _ := afterNode.JSONPath("@['ietf-te-topology:te']['tunnel-termination-point'][*]")
+							for _, afterTtp := range afterTtps {
+								ttpID, _ := afterTtp.GetKey("tunnel-tp-id")
+								ttpIDString, _ := ttpID.GetString()
+								if !previousTtpsIds[ttpIDString] {
+									value, _ := afterTtp.Unpack()
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoTTP, openapi.OperationCreate, value, networkIDString, nodeIDString, ttpIDString)
+									if err != nil {
+										logger.Errorf("ttp added notification error", err)
+										break
+									}
+								}
+							}
+
+							// Remove tp and ttp
 							previousTe, _ := previousNode.GetKey("ietf-te-topology:te")
 							previousTtpsNode, _ := previousTe.GetKey("tunnel-termination-point")
 							afterTe, _ := afterNode.GetKey("ietf-te-topology:te")
@@ -181,7 +262,54 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 							}
 						}
 					}
-					// TODO Compare Links
+					// Compare Links
+					previousLinksNode, _ := previousNetwork.GetKey("ietf-network-topology:link")
+					previousLinks, _ := previousLinksNode.GetArray()
+					previousLinksIds := make(map[string]bool)
+					for _, previousLink := range previousLinks {
+						linkID, _ := previousLink.GetKey("link-id")
+						linkIDString, _ := linkID.GetString()
+						previousLinksIds[linkIDString] = true
+						afterLinkArray, _ := afterNetwork.JSONPath("@['ietf-network-topology:link'][?(@['link-id']=='" + linkIDString + "')]")
+						if len(afterLinkArray) > 0 {
+							afterLink := afterLinkArray[0]
+							// check updated
+							eq, _ := previousLink.Eq(afterLink)
+							if err != nil {
+								logger.Errorf("link compare error", err)
+							} else {
+								if !eq {
+									value, _ := afterLink.Unpack()
+									err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoLink, openapi.OperationUpdate, value, networkIDString, linkIDString)
+									if err != nil {
+										logger.Errorf("link update notification error", err)
+										break
+									}
+								}
+							}
+						} else {
+							err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoLink, openapi.OperationDelete, nil, networkIDString, linkIDString)
+							if err != nil {
+								logger.Errorf("link delete notification error", err)
+								break
+							}
+						}
+					}
+					// check added
+					afterLinksNode, _ := afterNetwork.GetKey("ietf-network-topology:link")
+					afterLinks, _ := afterLinksNode.GetArray()
+					for _, afterLink := range afterLinks {
+						linkID, _ := afterLink.GetKey("link-id")
+						linkIDString, _ := linkID.GetString()
+						if !previousLinksIds[linkIDString] {
+							value, _ := afterLink.Unpack()
+							err := subscriptionCenter.SendAll(openapi.ObjectTypeInfoLink, openapi.OperationCreate, value, networkIDString, linkIDString)
+							if err != nil {
+								logger.Errorf("node added notification error", err)
+								break
+							}
+						}
+					}
 				}
 			}
 			//err = subscriptionCenter.SendAll(openapi.ObjectTypeInfoNode, openapi.OperationUpdate, nil, networkID)

@@ -14,14 +14,22 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
 type SubscriptionCenter struct {
+	counter       uint32
 	subscriptions map[uint32][]string // subscription id -> objectType[]
 	brokerMap     map[uint32]*net.Broker
 	connMap       map[uint32]map[string]*net.ClientConnection // subscription id -> connection id -> connection
+}
+
+type SubscriptionCenterDTO struct {
+	Counter       uint32
+	Subscriptions map[uint32][]string // subscription id -> objectType[]
 }
 
 const path = "subscriptions.json"
@@ -35,19 +43,28 @@ func newBroker() *net.Broker {
 }
 
 func NewSubscriptionCenter() *SubscriptionCenter {
-	sc := &SubscriptionCenter{subscriptions: make(map[uint32][]string), brokerMap: make(map[uint32]*net.Broker), connMap: make(map[uint32]map[string]*net.ClientConnection)}
+	sc := &SubscriptionCenter{counter: 0, subscriptions: make(map[uint32][]string), brokerMap: make(map[uint32]*net.Broker), connMap: make(map[uint32]map[string]*net.ClientConnection)}
 	_, err := os.Stat(path)
 	if !os.IsNotExist(err) {
 		// file exists
 		var fileContent []byte
 		fileContent, _ = ioutil.ReadFile(path)
-		_ = json.Unmarshal(fileContent, &sc.subscriptions)
+		var dto SubscriptionCenterDTO
+		err = json.Unmarshal(fileContent, &dto)
+		if err == nil {
+			sc.counter = dto.Counter
+			sc.subscriptions = dto.Subscriptions
+		}
 	}
 	return sc
 }
 
 func (subscriptionCenter *SubscriptionCenter) Save() (err error) {
-	data, err := json.Marshal(subscriptionCenter.subscriptions)
+	dto := SubscriptionCenterDTO{
+		Counter:       subscriptionCenter.counter,
+		Subscriptions: subscriptionCenter.subscriptions,
+	}
+	data, err := json.Marshal(dto)
 	if err != nil {
 		return
 	}
@@ -59,14 +76,14 @@ func (subscriptionCenter *SubscriptionCenter) Subscribe(subscriptions []openapi.
 	if subscriptionCenter.subscriptions == nil {
 		subscriptionCenter.subscriptions = make(map[uint32][]string)
 	}
-	resultId = uint32(len(subscriptionCenter.subscriptions) + 1)
+	resultId = atomic.AddUint32(&subscriptionCenter.counter, 1)
 	objectTypeInfoSet := set.NewHashSet()
 	for _, subscription := range subscriptions {
 		objectTypeInfoSet.Add(subscription.ObjectTypeInfo)
 	}
 	subscriptionCenter.subscriptions[resultId] = make([]string, objectTypeInfoSet.Len())
-	for _, objectTypeInfo := range objectTypeInfoSet.Elements() {
-		subscriptionCenter.subscriptions[resultId] = append(subscriptionCenter.subscriptions[resultId], objectTypeInfo.(string))
+	for i, objectTypeInfo := range objectTypeInfoSet.Elements() {
+		subscriptionCenter.subscriptions[resultId][i] = objectTypeInfo.(string)
 	}
 	_ = subscriptionCenter.Save()
 	subscriptionCenter.brokerMap[resultId] = newBroker()
@@ -104,6 +121,7 @@ func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, interval uint64
 	if subscriptionCenter.brokerMap[id] == nil {
 		subscriptionCenter.brokerMap[id] = newBroker()
 	}
+	println("Connecting with new client to subscription ", id)
 	conn, err := subscriptionCenter.brokerMap[id].ConnectWithHeartBeatInterval(clientId, w, r, time.Duration(interval)*time.Second)
 	if err != nil {
 		return
@@ -112,6 +130,7 @@ func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, interval uint64
 		subscriptionCenter.connMap[id] = map[string]*net.ClientConnection{}
 	}
 	subscriptionCenter.connMap[id][clientId] = conn
+	println("Connected with new client to subscription ", id, "with session id ", conn.SessionId())
 	<-conn.Done()
 	delete(subscriptionCenter.connMap[id], clientId)
 	return nil
@@ -134,14 +153,20 @@ func (subscriptionCenter *SubscriptionCenter) SendAll(objectType string, operati
 	return nil
 }
 
-func objectTypeToTarget(objectType string, ids ...string) (string, error) {
+func objectTypeToTarget(objectType string, unescapedIds ...string) (string, error) {
+	ids := make([]string, len(unescapedIds))
+	for i := range unescapedIds {
+		ids[i] = url.QueryEscape(unescapedIds[i])
+	}
 	switch objectType {
 	case openapi.ObjectTypeInfoNode:
-		url := "/restconf/data/ietf-network:networks/network/network-id=" + ids[0] + "/node"
-		if len(ids) > 1 {
-			url += "/node-id=" + ids[1]
-		}
-		return url, nil
+		return "/restconf/data/ietf-network:networks/network=" + ids[0] + "/node=" + ids[1], nil
+	case openapi.ObjectTypeInfoTP:
+		return "/restconf/data/ietf-network:networks/network=" + ids[0] + "/node=" + ids[1] + "/ietf-network-topology:termination-point=" + ids[2], nil
+	case openapi.ObjectTypeInfoTTP:
+		return "/restconf/data/ietf-network:networks/network=" + ids[0] + "/node=" + ids[1] + "/ietf-te-topology:te/tunnel-termination-point=" + ids[2], nil
+	case openapi.ObjectTypeInfoLink:
+		return "/restconf/data/ietf-network:networks/network=" + ids[0] + "/ietf-network-topology:link=" + ids[1], nil
 	default:
 		return "", errors.New("Object type " + objectType + " not supported")
 	}
