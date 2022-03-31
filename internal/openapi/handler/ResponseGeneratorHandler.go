@@ -495,7 +495,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 	} else if request.Method != "DELETE" {
 		// Try to read from database
 		if request.Method == "GET" || request.Method == "HEAD" {
-			entry, err := db.Get(keyPath)
+			entry, parentIsArray, err := db.Get(keyPath)
 			if err == nil {
 				var namespacedKey string
 				for key := range response.Data.(map[string]interface{}) {
@@ -506,7 +506,11 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 					logger.Errorf("Read database entry error", entry, err)
 				}
 				if request.Method == "GET" {
-					response.Data = map[string]interface{}{namespacedKey: response.Data}
+					if !parentIsArray {
+						response.Data = map[string]interface{}{namespacedKey: response.Data}
+					} else {
+						response.Data = map[string]interface{}{namespacedKey: []interface{}{response.Data}}
+					}
 				}
 			} else if err.Error() == "Key Path Empty Error" {
 				handler.notFound(writer, request)

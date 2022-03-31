@@ -164,7 +164,7 @@ func (db *Database) GetETag() (eTag string, err error) {
 	return eTagNode.GetString()
 }
 
-func (db *Database) Get(keyPath KeyPath) (value Value, err error) {
+func (db *Database) Get(keyPath KeyPath) (value Value, parentIsArray bool, err error) {
 	nodes, err := db.Content.JSONPath(keyPath)
 	if err != nil {
 		return
@@ -178,6 +178,7 @@ func (db *Database) Get(keyPath KeyPath) (value Value, err error) {
 		return
 	}
 	value = nodes[0]
+	parentIsArray = value.Parent().IsArray()
 	return
 }
 
