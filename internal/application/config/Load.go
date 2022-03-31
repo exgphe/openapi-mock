@@ -87,6 +87,7 @@ func createApplicationConfiguration(fileConfig *fileConfiguration) *Configuratio
 
 		CORSEnabled:     fileConfig.HTTP.CORSEnabled,
 		Port:            defaultOnNilUint16(fileConfig.HTTP.Port, DefaultPort),
+		HTTPSPort:       defaultOnNilUint16(fileConfig.HTTP.HTTPSPort, DefaultHTTPSPort),
 		ResponseTimeout: time.Duration(fileConfig.HTTP.ResponseTimeout * float64(time.Second)),
 
 		Debug:     fileConfig.Application.Debug,

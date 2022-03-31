@@ -114,7 +114,10 @@ func (factory *Factory) CreateHTTPServer() (server.Server, error) {
 	httpHandler := factory.CreateHTTPHandler(router)
 
 	serverLogger := log.New(loggerWriter, "[HTTP]: ", log.LstdFlags)
-	httpServer := server.New(factory.configuration.Port, httpHandler, serverLogger)
+	httpServer, err := server.New(factory.configuration.HTTPSPort, factory.configuration.Port, httpHandler, serverLogger)
+	if err != nil {
+		return nil, err
+	}
 
 	logger.WithFields(factory.configuration.Dump()).Info("OpenAPI mock server was created")
 

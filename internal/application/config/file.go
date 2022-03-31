@@ -25,6 +25,7 @@ type openapiConfiguration struct {
 
 type httpConfiguration struct {
 	Port            *uint16 `json:"port" yaml:"port"`
+	HTTPSPort       *uint16 `json:"https_port" yaml:"https_port"`
 	CORSEnabled     bool    `json:"cors_enabled" yaml:"cors_enabled"`
 	ResponseTimeout float64 `json:"response_timeout" yaml:"response_timeout"`
 }

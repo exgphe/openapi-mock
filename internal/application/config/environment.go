@@ -7,6 +7,7 @@ type environmentConfiguration struct {
 
 	CORSEnabled     *bool `split_words:"true"`
 	Port            *uint16
+	HTTPSPort       *uint16  `split_words:"true"`
 	ResponseTimeout *float64 `split_words:"true"`
 
 	Debug     *bool
@@ -36,6 +37,7 @@ func updateConfigFromEnvironment(fileConfig *fileConfiguration) {
 
 	fileConfig.HTTP.CORSEnabled = coalesceBool(fileConfig.HTTP.CORSEnabled, envConfig.CORSEnabled)
 	fileConfig.HTTP.Port = coalesceUint16(fileConfig.HTTP.Port, envConfig.Port)
+	fileConfig.HTTP.HTTPSPort = coalesceUint16(fileConfig.HTTP.HTTPSPort, envConfig.HTTPSPort)
 	fileConfig.HTTP.ResponseTimeout = *coalesceFloat(&fileConfig.HTTP.ResponseTimeout, envConfig.ResponseTimeout)
 
 	fileConfig.Application.Debug = coalesceBool(fileConfig.Application.Debug, envConfig.Debug)

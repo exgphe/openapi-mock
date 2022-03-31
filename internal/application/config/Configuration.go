@@ -15,6 +15,7 @@ type Configuration struct {
 	// HTTP server options
 	CORSEnabled     bool
 	Port            uint16
+	HTTPSPort       uint16
 	ResponseTimeout time.Duration
 
 	// Application options
@@ -39,6 +40,7 @@ type Configuration struct {
 const (
 	DefaultGrpcPort        = uint16(50051)
 	DefaultPort            = uint16(8080)
+	DefaultHTTPSPort       = uint16(8081)
 	DefaultResponseTimeout = time.Hour
 	DefaultLogLevel        = logrus.InfoLevel
 	DefaultNullProbability = 0
@@ -53,6 +55,7 @@ func (config *Configuration) Dump() map[string]interface{} {
 		"SpecificationURL": config.SpecificationURL,
 		"CORSEnabled":      config.CORSEnabled,
 		"Port":             config.Port,
+		"HTTPSPort":        config.HTTPSPort,
 		"ResponseTimeout":  config.ResponseTimeout,
 		"Debug":            config.Debug,
 		"LogFormat":        config.LogFormat,
