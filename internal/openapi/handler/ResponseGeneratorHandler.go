@@ -458,7 +458,7 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 			var requestInput openapi.EstablishSubscriptionInput
 			err := json.Unmarshal(bodyData, &requestInput)
 			if err == nil {
-				if requestInput.Input.Encoding != "" && requestInput.Input.Encoding != "ietf-subscribed-notifications:encode-json" {
+				if requestInput.Input.Encoding != "" && requestInput.Input.Encoding != "ietf-subscribed-notifications:encode-json" && requestInput.Input.Encoding != "encode-json" {
 					handler.badRequestRestconf(writer, request, openapi.EncodingUnsupportedError())
 					return
 				}

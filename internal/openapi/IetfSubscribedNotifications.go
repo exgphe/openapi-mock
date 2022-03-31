@@ -15,8 +15,8 @@ type EstablishSubscriptionInput struct {
 }
 
 type Subscription struct {
-	Topic          string `json:"topic"`
-	ObjectTypeInfo string `json:"object-type-info"`
+	Topic          Topic          `json:"topic"`
+	ObjectTypeInfo ObjectTypeInfo `json:"object-type-info"`
 }
 
 type EstablishSubscriptionOutputWrapped struct {
@@ -34,22 +34,26 @@ type DeleteSubscriptionInput struct {
 	} `json:"ietf-subscribed-notifications:input"`
 }
 
+type Topic string
+type ObjectTypeInfo string
+type Operation string
+
 const (
-	TopicResources = "resources"
-	TopicServices  = "services"
+	TopicResources Topic = "resources"
+	TopicServices  Topic = "services"
 
-	ObjectTypeInfoNode           = "NODE"
-	ObjectTypeInfoLink           = "LINK"
-	ObjectTypeInfoTP             = "TP"
-	ObjectTypeInfoTTP            = "TTP"
-	ObjectTypeInfoTunnel         = "TUNNEL"
-	ObjectTypeInfoClientService  = "client-service"
-	ObjectTypeInfoEthTranService = "eth-tran-service"
-	ObjectTypeInfoServicePm      = "service-pm"
+	ObjectTypeInfoNode           ObjectTypeInfo = "NODE"
+	ObjectTypeInfoLink           ObjectTypeInfo = "LINK"
+	ObjectTypeInfoTP             ObjectTypeInfo = "TP"
+	ObjectTypeInfoTTP            ObjectTypeInfo = "TTP"
+	ObjectTypeInfoTunnel         ObjectTypeInfo = "TUNNEL"
+	ObjectTypeInfoClientService  ObjectTypeInfo = "client-service"
+	ObjectTypeInfoEthTranService ObjectTypeInfo = "eth-tran-service"
+	ObjectTypeInfoServicePm      ObjectTypeInfo = "service-pm"
 
-	OperationCreate = "create"
-	OperationDelete = "delete"
-	OperationUpdate = "update"
+	OperationCreate Operation = "create"
+	OperationDelete Operation = "delete"
+	OperationUpdate Operation = "update"
 )
 
 func NoSuchSubscriptionError() RestconfError {
@@ -101,12 +105,12 @@ type YangPatchBody struct {
 
 type YangPatchEdit struct {
 	EditID    string      `json:"edit-id"`
-	Operation string      `json:"operation"`
+	Operation Operation   `json:"operation"`
 	Target    string      `json:"target"`
 	Value     interface{} `json:"value"`
 }
 
-func NewRestconfNotification(id uint32, operation string, target string, value interface{}) RestconfNotification {
+func NewRestconfNotification(id uint32, operation Operation, target string, value interface{}) RestconfNotification {
 	currentTime := time.Now()
 	return RestconfNotification{
 		Notification: RestconfNotificationBody{

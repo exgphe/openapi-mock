@@ -18,6 +18,10 @@ func (handler *optionsHandler) ServeHTTP(writer http.ResponseWriter, request *ht
 		handler.respond(writer, request)
 	} else {
 		allowedMethods := handler.getAllowedMethods(request)
+		if len(allowedMethods) == 1 {
+			handler.notFound(writer, request)
+			return
+		}
 		methodAllowed := false
 		for _, method := range allowedMethods {
 			if method == request.Method {
@@ -79,6 +83,22 @@ func (handler *optionsHandler) methodNotAllowed(writer http.ResponseWriter, requ
 		ErrorTag:     openapi.ErrorTagOperationNotSuported,
 		ErrorPath:    request.URL.Path,
 		ErrorMessage: "Method Not Allowed",
+	})
+
+	marshal, _ := json.Marshal(restconfErrors)
+
+	_, _ = writer.Write(marshal)
+}
+
+func (handler *optionsHandler) notFound(writer http.ResponseWriter, request *http.Request) {
+	writer.Header().Set("Content-Type", "application/yang-data+json; charset=UTF-8")
+	writer.WriteHeader(http.StatusNotFound)
+
+	restconfErrors := openapi.NewRestconfErrors(openapi.RestconfError{
+		ErrorType:    openapi.ErrorTypeProtocol,
+		ErrorTag:     openapi.ErrorTagInvalidValue,
+		ErrorPath:    request.URL.Path,
+		ErrorMessage: "Not Found",
 	})
 
 	marshal, _ := json.Marshal(restconfErrors)

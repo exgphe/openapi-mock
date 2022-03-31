@@ -22,14 +22,14 @@ import (
 
 type SubscriptionCenter struct {
 	counter       uint32
-	subscriptions map[uint32][]string // subscription id -> objectType[]
+	subscriptions map[uint32][]openapi.ObjectTypeInfo // subscription id -> objectType[]
 	brokerMap     map[uint32]*net.Broker
 	connMap       map[uint32]map[string]*net.ClientConnection // subscription id -> connection id -> connection
 }
 
-type SubscriptionCenterDTO struct {
+type subscriptionCenterDTO struct {
 	Counter       uint32
-	Subscriptions map[uint32][]string // subscription id -> objectType[]
+	Subscriptions map[uint32][]openapi.ObjectTypeInfo // subscription id -> objectType[]
 }
 
 const path = "subscriptions.json"
@@ -43,13 +43,13 @@ func newBroker() *net.Broker {
 }
 
 func NewSubscriptionCenter() *SubscriptionCenter {
-	sc := &SubscriptionCenter{counter: 0, subscriptions: make(map[uint32][]string), brokerMap: make(map[uint32]*net.Broker), connMap: make(map[uint32]map[string]*net.ClientConnection)}
+	sc := &SubscriptionCenter{counter: 0, subscriptions: make(map[uint32][]openapi.ObjectTypeInfo), brokerMap: make(map[uint32]*net.Broker), connMap: make(map[uint32]map[string]*net.ClientConnection)}
 	_, err := os.Stat(path)
 	if !os.IsNotExist(err) {
 		// file exists
 		var fileContent []byte
 		fileContent, _ = ioutil.ReadFile(path)
-		var dto SubscriptionCenterDTO
+		var dto subscriptionCenterDTO
 		err = json.Unmarshal(fileContent, &dto)
 		if err == nil {
 			sc.counter = dto.Counter
@@ -60,7 +60,7 @@ func NewSubscriptionCenter() *SubscriptionCenter {
 }
 
 func (subscriptionCenter *SubscriptionCenter) Save() (err error) {
-	dto := SubscriptionCenterDTO{
+	dto := subscriptionCenterDTO{
 		Counter:       subscriptionCenter.counter,
 		Subscriptions: subscriptionCenter.subscriptions,
 	}
@@ -74,23 +74,23 @@ func (subscriptionCenter *SubscriptionCenter) Save() (err error) {
 
 func (subscriptionCenter *SubscriptionCenter) Subscribe(subscriptions []openapi.Subscription) (resultId uint32) {
 	if subscriptionCenter.subscriptions == nil {
-		subscriptionCenter.subscriptions = make(map[uint32][]string)
+		subscriptionCenter.subscriptions = make(map[uint32][]openapi.ObjectTypeInfo)
 	}
 	resultId = atomic.AddUint32(&subscriptionCenter.counter, 1)
 	objectTypeInfoSet := set.NewHashSet()
 	for _, subscription := range subscriptions {
 		objectTypeInfoSet.Add(subscription.ObjectTypeInfo)
 	}
-	subscriptionCenter.subscriptions[resultId] = make([]string, objectTypeInfoSet.Len())
+	subscriptionCenter.subscriptions[resultId] = make([]openapi.ObjectTypeInfo, objectTypeInfoSet.Len())
 	for i, objectTypeInfo := range objectTypeInfoSet.Elements() {
-		subscriptionCenter.subscriptions[resultId][i] = objectTypeInfo.(string)
+		subscriptionCenter.subscriptions[resultId][i] = objectTypeInfo.(openapi.ObjectTypeInfo)
 	}
 	_ = subscriptionCenter.Save()
 	subscriptionCenter.brokerMap[resultId] = newBroker()
 	return
 }
 
-func (subscriptionCenter *SubscriptionCenter) Get(id uint32) []string {
+func (subscriptionCenter *SubscriptionCenter) Get(id uint32) []openapi.ObjectTypeInfo {
 	return subscriptionCenter.subscriptions[id]
 }
 
@@ -136,7 +136,7 @@ func (subscriptionCenter *SubscriptionCenter) Connect(id uint32, interval uint64
 	return nil
 }
 
-func (subscriptionCenter *SubscriptionCenter) SendAll(objectType string, operation string, value interface{}, ids ...string) error {
+func (subscriptionCenter *SubscriptionCenter) SendAll(objectType openapi.ObjectTypeInfo, operation openapi.Operation, value interface{}, ids ...string) error {
 	target, err := objectTypeToTarget(objectType, ids...)
 	if err != nil {
 		return err
@@ -153,7 +153,7 @@ func (subscriptionCenter *SubscriptionCenter) SendAll(objectType string, operati
 	return nil
 }
 
-func objectTypeToTarget(objectType string, unescapedIds ...string) (string, error) {
+func objectTypeToTarget(objectType openapi.ObjectTypeInfo, unescapedIds ...string) (string, error) {
 	ids := make([]string, len(unescapedIds))
 	for i := range unescapedIds {
 		ids[i] = url.QueryEscape(unescapedIds[i])
@@ -168,23 +168,23 @@ func objectTypeToTarget(objectType string, unescapedIds ...string) (string, erro
 	case openapi.ObjectTypeInfoLink:
 		return "/restconf/data/ietf-network:networks/network=" + ids[0] + "/ietf-network-topology:link=" + ids[1], nil
 	default:
-		return "", errors.New("Object type " + objectType + " not supported")
+		return "", errors.New(string("Object type " + objectType + " not supported"))
 	}
 }
 
 func (subscriptionCenter *SubscriptionCenter) Send(notification openapi.RestconfNotification) {
 	for _, conn := range subscriptionCenter.connMap[notification.Notification.PushChangeUpdate.SubscriptionID] {
-		conn.Send(&SSEEvent{
+		conn.Send(&RestconfEvent{
 			Data: notification,
 		})
 	}
 }
 
-type SSEEvent struct {
+type RestconfEvent struct {
 	Data interface{}
 }
 
-func (e SSEEvent) Prepare() []byte {
+func (e RestconfEvent) Prepare() []byte {
 	var data bytes.Buffer
 
 	marshal, err := json.Marshal(e.Data)
@@ -199,15 +199,15 @@ func (e SSEEvent) Prepare() []byte {
 	return data.Bytes()
 }
 
-func (e SSEEvent) GetId() string {
+func (e RestconfEvent) GetId() string {
 	return ""
 }
 
-func (e SSEEvent) GetEvent() string {
+func (e RestconfEvent) GetEvent() string {
 	return ""
 }
 
-func (e SSEEvent) GetData() string {
+func (e RestconfEvent) GetData() string {
 	marshal, err := json.Marshal(e.Data)
 	if err != nil {
 		logrus.Errorf("error marshaling JSONEvent: %v", err)
