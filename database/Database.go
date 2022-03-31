@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,6 +26,7 @@ type Dictionary = *ajson.Node
 
 type Database struct {
 	Content Dictionary
+	m       sync.Mutex
 }
 
 const lastModifiedKey = "@@last-modified"
@@ -124,6 +126,8 @@ func RestconfPathToKeyPath(restconfPath string, operation *openapi3.Operation) (
 }
 
 func (db *Database) Save(filename string) (err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	fileData, err := ajson.Marshal(db.Content)
 	if err != nil {
 		return
@@ -133,6 +137,8 @@ func (db *Database) Save(filename string) (err error) {
 }
 
 func (db *Database) Modified() error {
+	db.m.Lock()
+	defer db.m.Unlock()
 	err := db.Content.AppendObject(lastModifiedKey, ajson.StringNode(lastModifiedKey, time.Now().Format(time.RFC1123)))
 	if err != nil {
 		return err
@@ -184,6 +190,8 @@ func (db *Database) Get(keyPath KeyPath) (value Value, parentIsArray bool, err e
 
 // EnsureKeyPath Only supports $.aa.bb.cc or $.aa.bb[?(@.id=='123')].cc
 func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	paths, err := ajson.ParseJSONPath(keyPath)
 	if err != nil {
 		return
@@ -258,6 +266,8 @@ func (db *Database) EnsureKeyPath(keyPath KeyPath) (err error) {
 }
 
 func (db *Database) Delete(keyPath KeyPath) (err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	//err = db.EnsureKeyPath(keyPath)
 	//if err != nil {
 	//	return
@@ -409,6 +419,8 @@ func (db *Database) Delete(keyPath KeyPath) (err error) {
 //}
 
 func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	nodes, err := db.Content.JSONPath(keyPath)
 	if err != nil {
 		return
@@ -518,6 +530,8 @@ func (db *Database) Put(keyPath string, node *ajson.Node) (created bool, err err
 }
 
 func (db *Database) Post(keyPath string, node *ajson.Node, key string, listKeys []string) (appendKey string, err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	err = db.EnsureKeyPath(keyPath)
 	if err != nil {
 		return
@@ -627,6 +641,8 @@ func (db *Database) Post(keyPath string, node *ajson.Node, key string, listKeys 
 }
 
 func (db *Database) Patch(keyPath string, patchNode *ajson.Node) (err error) {
+	db.m.Lock()
+	defer db.m.Unlock()
 	parentNodes, err := db.Content.JSONPath(keyPath)
 	if err != nil {
 		return
