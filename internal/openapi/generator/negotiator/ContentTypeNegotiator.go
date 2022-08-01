@@ -24,7 +24,7 @@ func (negotiator *contentTypeNegotiator) NegotiateContentType(request *http.Requ
 	if len(response.Content) == 0 {
 		logger.Infof("[contentTypeNegotiator] response has no content")
 
-		return ""
+		return "application/yang-data+json"
 	}
 
 	contentTypes := negotiator.getContentTypes(response)

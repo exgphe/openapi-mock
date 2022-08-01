@@ -137,8 +137,8 @@ func (db *Database) Save(filename string) (err error) {
 }
 
 func (db *Database) Modified() error {
-	db.m.Lock()
-	defer db.m.Unlock()
+	//db.m.Lock()
+	//defer db.m.Unlock()
 	err := db.Content.AppendObject(lastModifiedKey, ajson.StringNode(lastModifiedKey, time.Now().Format(time.RFC1123)))
 	if err != nil {
 		return err

@@ -101,10 +101,10 @@ func (generator *stringGenerator) generateNumberString(schema *openapi3.Schema) 
 		return strconv.FormatFloat(min+rand.Float64()*(max-min), 'f', fractionDigits, 64), nil
 	} else {
 		if xType == "uint64" {
-			return strconv.FormatUint(uint64(min+rand.Float64()*max), 10), nil
+			return strconv.FormatUint(uint64(min+rand.Float64()*(max-min)), 10), nil
 		} else {
 			// "int64"
-			return strconv.FormatInt(int64(min+rand.Float64()*max), 10), nil
+			return strconv.FormatInt(int64(min+rand.Float64()*(max-min)), 10), nil
 		}
 	}
 }

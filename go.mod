@@ -1,6 +1,6 @@
 module github.com/muonsoft/openapi-mock
 
-go 1.17
+go 1.18
 
 require (
 	github.com/clbanning/mxj v1.8.4

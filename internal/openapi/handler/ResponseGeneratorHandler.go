@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/exgphe/kin-openapi/openapi3"
 	"github.com/exgphe/kin-openapi/routers"
 	"github.com/exgphe/kin-openapi/routers/legacy"
@@ -20,6 +21,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -489,7 +491,50 @@ func (handler *responseGeneratorHandler) ServeHTTP(writer http.ResponseWriter, r
 				logger.Errorf("Cannot extract body", err)
 				return
 			}
+		case "/restconf/operations/ietf-te:globals-rpc":
+			response.StatusCode = http.StatusNoContent
+			response.Data = nil
+		case "/restconf/operations/ietf-te:interfaces-rpc":
+			response.StatusCode = http.StatusNoContent
+			response.Data = nil
+		case "/restconf/operations/ietf-te:tunnels-rpc":
+			jsonFile, err := os.Open("/Users/exgphe/ietf-te-tunnels-rpc.json") // TODO
+			if err != nil {
+				fmt.Println("error opening json file")
+				return
+			}
+			defer jsonFile.Close()
+			response.StatusCode = http.StatusOK
+			jsonData, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				fmt.Println("error reading json file")
+				return
+			}
+			err = json.Unmarshal(jsonData, &response.Data)
+			if err != nil {
+				fmt.Println("error unmarshalling")
+				return
+			}
+		case "/restconf/operations/ietf-wson-tunnel:wson-te-tunnel-path-compute":
+			jsonFile, err := os.Open("/Users/exgphe/ietf-wson-tunnel-wson-te-tunnel-path-compute.json") // TODO
+			if err != nil {
+				fmt.Println("error opening json file")
+				return
+			}
+			defer jsonFile.Close()
+			response.StatusCode = http.StatusOK
+			jsonData, err := ioutil.ReadAll(jsonFile)
+			if err != nil {
+				fmt.Println("error reading json file")
+				return
+			}
+			err = json.Unmarshal(jsonData, &response.Data)
+			if err != nil {
+				fmt.Println("error unmarshalling")
+				return
+			}
 		default:
+			// TODO extract data of the url and put it in the request
 			break
 		}
 	} else if request.Method != "DELETE" {

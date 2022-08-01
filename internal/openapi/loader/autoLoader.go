@@ -2,7 +2,6 @@ package loader
 
 import (
 	"github.com/exgphe/kin-openapi/openapi3"
-	"net/url"
 )
 
 type autoLoader struct {
@@ -10,10 +9,10 @@ type autoLoader struct {
 }
 
 func (loader *autoLoader) LoadFromURI(uri string) (*openapi3.T, error) {
-	specificationURL, err := url.Parse(uri)
-	if err != nil || specificationURL.Scheme == "" {
-		return loader.loader.LoadFromFile(uri)
-	}
-
-	return loader.loader.LoadFromURI(specificationURL)
+	//specificationURL, err := url.Parse(uri)
+	//if err != nil || specificationURL.Scheme == "" {
+	return loader.loader.LoadFromFile(uri)
+	//}
+	//
+	//return loader.loader.LoadFromURI(specificationURL)
 }
